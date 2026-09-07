@@ -104,7 +104,7 @@ class Orchestrator:
             yield {"event": "plan", "data": plan}
 
             # 2. AI decide scenes & screenshots. The model is told the hard
-            #    limits (max 3 scenes, 30s/clip) and asked to either split
+            #    limits (max 3 scenes, per-call duration cap) and asked to either split
             #    into multiple logical scenes OR keep it as a single coherent
             #    ad. It also decides whether to embed screenshots of the web
             #    app (when the source is a URL).
@@ -255,7 +255,7 @@ class Orchestrator:
             f"Style: {req.style}.\n"
             f"Source kind: {req.source_kind}.\n\n"
             f"Decide the video generation strategy. The video model is "
-            f"`alibaba/wan-3.0/reference-to-video` \u2014 it produces a coherent "
+            f"`{settings.wavespeed_video_model}` \u2014 it produces a coherent "
             f"clip of at most {max_dur}s. There are two valid strategies:\n"
             f"  A. SINGLE SCENE: one wavespeed call with all reference images "
             f"(subjects, brand assets, optional web app screenshots). Use this "
