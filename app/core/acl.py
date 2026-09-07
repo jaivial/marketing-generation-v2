@@ -404,6 +404,16 @@ ROUTE_PERMISSIONS: list[dict] = [
     {"method": "POST", "path": "/api/campaigns",           "perm": Perm.CREATE_CAMPAIGN,  "category": "user",    "label": "Run campaign (SSE)"},
     {"method": "POST", "path": "/api/campaigns/sync",      "perm": Perm.CREATE_CAMPAIGN,  "category": "user",    "label": "Run campaign (sync JSON)"},
     {"method": "GET",  "path": "/api/campaigns/history",   "perm": Perm.VIEW_CAMPAIGNS_OWN, "category": "user",  "label": "Campaign history"},
+    {"method": "GET",  "path": "/api/campaigns/estimate",  "perm": Perm.VIEW_DASHBOARD,   "category": "user",    "label": "Campaign cost estimate"},
+
+    # Billing. The plan table is public so guests can browse pricing; the
+    # rest needs at least a dashboard-capable role, and topup is root-only
+    # (enforced by require_root() on the endpoint itself).
+    {"method": "GET",  "path": "/api/billing/plans",       "perm": None,                  "category": "public",  "label": "Price table"},
+    {"method": "GET",  "path": "/api/billing/balance",     "perm": Perm.VIEW_DASHBOARD,   "category": "user",    "label": "Credit balance"},
+    {"method": "GET",  "path": "/api/billing/workspace",   "perm": Perm.VIEW_DASHBOARD,   "category": "user",    "label": "My workspace + plan"},
+    {"method": "POST", "path": "/api/billing/checkout",    "perm": Perm.VIEW_DASHBOARD,   "category": "user",    "label": "Choose plan"},
+    {"method": "POST", "path": "/api/billing/topup",       "perm": Perm.WRITE_BILLING,    "category": "admin",   "label": "Grant credits (root only)"},
 
     # Admin / Root
     {"method": "GET",  "path": "/api/admin/roles",         "perm": Perm.ADMIN_SYSTEM,     "category": "admin",   "label": "List roles"},
