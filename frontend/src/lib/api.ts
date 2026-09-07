@@ -22,7 +22,7 @@ export async function* streamCampaign(body: StreamCampaignBody): AsyncGenerator<
 
   const r = await fetch(`${apiBase}/api/campaigns`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
   });
   if (!r.ok || !r.body) {
@@ -48,15 +48,75 @@ export async function* streamCampaign(body: StreamCampaignBody): AsyncGenerator<
   }
 }
 
+/**
+ * Fetch the caller's campaign history.
+ *
+ * Returns `null` (rather than throwing or returning `[]`) when the request
+ * fails or the caller isn't authorised, so pages can distinguish "backend
+ * unavailable, keep showing what we have" from "you genuinely have zero
+ * campaigns". `authHeaders()` is hoisted from below.
+ */
 export async function getHistory(): Promise<any[] | null> {
   try {
-    const r = await fetch(`${apiBase}/api/campaigns/history`);
+    const r = await fetch(`${apiBase}/api/campaigns/history`, {
+      headers: authHeaders(),
+    });
     if (r.ok) {
       const j = await r.json();
       if (Array.isArray(j.campaigns)) return j.campaigns;
     }
   } catch {}
   return null;
+}
+
+export interface CampaignDetailPlan {
+  plan: {
+    hook?: string; tagline?: string; cta?: string;
+    audience?: string; tone?: string;
+  } | null;
+  script: string;
+  frames: string[];
+  screenshots: string[];
+  video_url: string | null;
+  scenes: string[];
+  multi_scene: boolean;
+}
+
+export interface CampaignAsset {
+  id: number | null;
+  kind: string;
+  url: string;
+  duration_s: number | null;
+  metadata: Record<string, any>;
+  created_at: number;
+}
+
+export interface CampaignDetail {
+  campaign: any;
+  plan: CampaignDetailPlan;
+  assets: CampaignAsset[];
+}
+
+/** Thrown by `getCampaign` so callers can branch on 403 vs 404. */
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+    this.name = 'ApiError';
+  }
+}
+
+/** GET /api/campaigns/{id} -> `{campaign, plan, assets}`. */
+export async function getCampaign(id: string): Promise<CampaignDetail> {
+  const r = await fetch(`${apiBase}/api/campaigns/${encodeURIComponent(id)}`, {
+    headers: authHeaders(),
+  });
+  if (!r.ok) {
+    const detail = await r.text().catch(() => '');
+    throw new ApiError(r.status, detail || `HTTP ${r.status}`);
+  }
+  return r.json();
 }
 
 export async function getHealth(): Promise<{ ok: boolean }> {

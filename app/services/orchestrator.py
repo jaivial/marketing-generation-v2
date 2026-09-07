@@ -40,10 +40,12 @@ from app.services import wavespeed_client as _ws
 from app.services.credits import (
     InsufficientCreditsError,
     estimate_campaign_cost,
+    ledger_available,
     price_for_user,
     refund_reservation,
     require_credits,
 )
+from app.services import storage as default_storage
 from app.services.wavespeed_client import SceneClip, ScenePlan, WavespeedCLI
 
 
@@ -80,9 +82,14 @@ class CampaignRequest:
     # source URL via agent-browser and feed them to the video model. Default
     # is True because the AI decides for each campaign.
     allow_screenshots: bool = True
-    # Billing context. When ``workspace_id`` is None the run is not charged
-    # (used by the offline smoke tests and by ad-hoc CLI runs).
+    # Billing + persistence context. ``workspace_id`` does double duty: it
+    # is the balance the run is charged against *and* the workspace the
+    # campaign row is written under. When it is None the run is neither
+    # charged nor persisted (offline smoke tests, ad-hoc CLI runs).
     workspace_id: str | None = None
+    user_id: str | None = None
+    # Pre-existing row to bill/settle against (set by callers that create the
+    # campaign themselves); otherwise the orchestrator creates its own.
     campaign_id: str | None = None
 
 
@@ -99,10 +106,15 @@ class Orchestrator:
         media: MediaClient,
         reader_factory: Callable[..., SourceReader],
         wavespeed: WavespeedCLI | None = None,
+        storage: Any | None = None,
     ) -> None:
         self._chat = chat
         self._media = media
         self._reader_factory = reader_factory
+        # Persistence is injected so tests can pass a FakeStorage. Defaults to
+        # the real ``app.services.storage`` module (duck-typed, module-level
+        # functions only -- no class to instantiate).
+        self._storage = storage if storage is not None else default_storage
         # The wavespeed client exposes the smart single-vs-multi decision and
         # the screenshot helper. We accept an override for tests.
         self._wavespeed = wavespeed or (
@@ -173,8 +185,134 @@ class Orchestrator:
             raise ValueError("model did not return JSON")
         return json.loads(m.group(0))
 
+    # ---------- persistence ---------------------------------------------------
+    def _create_campaign_row(self, req: CampaignRequest) -> str | None:
+        """Insert the ``campaigns`` row *before* any expensive work starts.
+
+        The row is created with status ``running`` so the Library / Campaigns
+        UI can show the campaign the instant the user hits "Generate" -- long
+        before the first frame comes back. Returns the new campaign id, or
+        None when the run is ephemeral (no workspace) or persistence fails.
+
+        A storage failure here must never abort the pipeline: the user still
+        gets their video, we just lose the history row (and log it).
+        """
+        if not req.workspace_id:
+            return None
+        if req.campaign_id:
+            # The caller already created the row; just adopt it.
+            return req.campaign_id
+        try:
+            row = self._storage.create_campaign(
+                workspace_id=req.workspace_id,
+                user_id=req.user_id or req.workspace_id,
+                source_kind=req.source_kind,
+                target=req.target,
+                duration_s=req.duration_s,
+                style=req.style,
+            )
+            campaign_id = row["id"] if isinstance(row, dict) else str(row)
+            self._storage.set_campaign_status(campaign_id, "running")
+            return campaign_id
+        except Exception as e:  # noqa: BLE001 -- persistence is best-effort
+            log.warning("could not create campaign row: %s", e)
+            return None
+
+    def _persist_done(
+        self,
+        campaign_id: str,
+        req: CampaignRequest,
+        *,
+        plan: dict,
+        frame_urls: list[str],
+        script: str,
+        video_url: str,
+        screenshot_urls: list[str],
+        scene_urls: list[str],
+        multi_scene: bool,
+        cost_usd: float,
+        credits_spent: float,
+    ) -> None:
+        """Write the finished campaign: plan blob + one row per asset."""
+        try:
+            self._storage.set_campaign_status(
+                campaign_id,
+                "done",
+                plan_json={
+                    "plan": plan,
+                    "frames": frame_urls,
+                    "script": script,
+                    "video_url": video_url,
+                    "screenshots": screenshot_urls,
+                    "scenes": scene_urls,
+                    "multi_scene": multi_scene,
+                },
+                total_cost_usd=cost_usd,
+                credits_spent=credits_spent,
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not persist campaign %s: %s", campaign_id, e)
+            return
+
+        # Assets are appended individually so the Library can query them by
+        # kind without having to parse the plan blob.
+        try:
+            for i, u in enumerate(frame_urls):
+                self._storage.add_campaign_asset(
+                    campaign_id, kind="frame", url=u, metadata={"index": i},
+                )
+            for i, u in enumerate(screenshot_urls):
+                self._storage.add_campaign_asset(
+                    campaign_id, kind="screenshot", url=u, metadata={"index": i},
+                )
+            for i, u in enumerate(scene_urls):
+                self._storage.add_campaign_asset(
+                    campaign_id, kind="stitched", url=u,
+                    metadata={"scene": i},
+                )
+            if video_url:
+                self._storage.add_campaign_asset(
+                    campaign_id, kind="video", url=video_url,
+                    duration_s=req.duration_s,
+                )
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not persist assets for %s: %s", campaign_id, e)
+
+    def _persist_failed(self, campaign_id: str, message: str) -> None:
+        try:
+            self._storage.set_campaign_status(
+                campaign_id, "failed", plan_json={"error": message},
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not mark campaign %s failed: %s", campaign_id, e)
+
     # ---------- main pipeline --------------------------------------------------
     async def run(self, req: CampaignRequest) -> AsyncIterator[dict]:
+        """Public entrypoint.
+
+        Creates the campaign row up-front (when the request carries a
+        workspace) and stamps ``campaign_id`` onto every SSE event so the
+        frontend knows which row to update as the run progresses.
+        """
+        campaign_id = self._create_campaign_row(req)
+        if campaign_id:
+            yield {
+                "event": "campaign",
+                "data": {"campaign_id": campaign_id, "status": "running"},
+            }
+        async for ev in self._pipeline(req, campaign_id):
+            data = ev.get("data")
+            if campaign_id and isinstance(data, dict):
+                # Shallow-copy before stamping: some events (notably "plan")
+                # yield the very dict we later persist, so mutating it in
+                # place would leak campaign_id into the stored plan blob.
+                if "campaign_id" not in data:
+                    ev = {**ev, "data": {**data, "campaign_id": campaign_id}}
+            yield ev
+
+    async def _pipeline(
+        self, req: CampaignRequest, campaign_id: str | None = None,
+    ) -> AsyncIterator[dict]:
         # ---- budget: reserve credits before touching any paid provider ----
         n_frames = self._n_frames(req.duration_s)
         n_video_clips = self._n_video_clips(req.duration_s)
@@ -189,10 +327,14 @@ class Orchestrator:
         clips_done = 0
         llm_calls_done = 0
 
-        if req.workspace_id:
+        # Billing is skipped when the storage backend has no credit ledger
+        # (ad-hoc runs and unit tests that inject a campaigns-only fake).
+        billable = bool(req.workspace_id) and ledger_available(self._storage)
+        if billable:
             try:
                 balance = require_credits(
-                    req.workspace_id, budget_usd, campaign_id=req.campaign_id,
+                    req.workspace_id, budget_usd, campaign_id=campaign_id,
+                    store=self._storage,
                 )
             except InsufficientCreditsError as exc:
                 yield {
@@ -366,15 +508,29 @@ class Orchestrator:
             if reserved_credits > 0:
                 # Never charge more than we reserved up front.
                 consumed_credits = min(consumed_credits, reserved_credits)
-            if req.workspace_id and reserved_credits > consumed_credits:
+            if billable and reserved_credits > consumed_credits:
                 refund_reservation(
                     req.workspace_id,
                     reserved_credits - consumed_credits,
-                    campaign_id=req.campaign_id,
+                    campaign_id=campaign_id,
+                    store=self._storage,
                 )
-            if req.campaign_id:
-                self._mark_campaign_cost(
-                    req.campaign_id, consumed_usd, consumed_credits,
+            # Persist the finished run before announcing "done" so a client
+            # that immediately reloads the Library sees the completed row.
+            # ``chunk_urls`` are the per-clip videos; the stitched master is
+            # ``video_url``. They map onto the Library's "scenes" concept.
+            if campaign_id:
+                self._persist_done(
+                    campaign_id, req,
+                    plan=plan,
+                    frame_urls=frame_urls,
+                    script=script,
+                    video_url=video_url,
+                    screenshot_urls=screenshot_urls,
+                    scene_urls=list(chunk_urls) if len(chunk_urls) > 1 else [],
+                    multi_scene=len(chunk_urls) > 1,
+                    cost_usd=consumed_usd,
+                    credits_spent=consumed_credits,
                 )
 
             yield {
@@ -387,6 +543,7 @@ class Orchestrator:
                     "per_chunk_s": per_chunk_s,
                     "stitched": stitched,
                     "multi_scene": len(chunk_urls) > 1,
+                    "video_url": video_url,
                     "cost_usd": consumed_usd,
                     "credits_spent": consumed_credits,
                 },
@@ -395,7 +552,7 @@ class Orchestrator:
             # Refund the *unused* portion of the reservation: the full budget
             # minus whatever the pipeline already burned before it blew up.
             refunded = 0.0
-            if req.workspace_id and reserved_credits > 0:
+            if billable and reserved_credits > 0:
                 # On a failed run the user only pays for media that actually
                 # materialised (frames rendered / clips produced). We absorb
                 # the handful of cheap LLM calls ourselves, so a campaign that
@@ -408,29 +565,16 @@ class Orchestrator:
                 unused = reserved_credits - price_for_user(consumed_usd)
                 if unused > 0:
                     refund_reservation(
-                        req.workspace_id, unused, campaign_id=req.campaign_id,
+                        req.workspace_id, unused, campaign_id=campaign_id,
+                        store=self._storage,
                     )
                     refunded = round(unused, 2)
+            if campaign_id:
+                self._persist_failed(campaign_id, str(e))
             yield {
                 "event": "error",
                 "data": {"message": str(e), "refunded_credits": refunded},
             }
-
-    # ---------- billing helpers ------------------------------------------------
-    @staticmethod
-    def _mark_campaign_cost(campaign_id: str, cost_usd: float,
-                            credits_spent: float) -> None:
-        """Persist the final cost on the campaign row (best-effort)."""
-        try:
-            from app.services import storage
-
-            storage.set_campaign_status(
-                campaign_id, "done",
-                total_cost_usd=cost_usd, credits_spent=credits_spent,
-            )
-        except Exception:  # noqa: BLE001 - billing bookkeeping must never
-            # break a successful generation.
-            pass
 
     # ---------- chunked script + stitching ------------------------------------
     async def _chunked_script(
@@ -583,7 +727,7 @@ class Orchestrator:
             f"Style: {req.style}.\n"
             f"Source kind: {req.source_kind}.\n\n"
             f"Decide the video generation strategy. The video model is "
-            f"`alibaba/wan-3.0/reference-to-video` \u2014 it produces a coherent "
+            f"`{settings.wavespeed_video_model}` \u2014 it produces a coherent "
             f"clip of at most {max_dur}s. There are two valid strategies:\n"
             f"  A. SINGLE SCENE: one wavespeed call with all reference images "
             f"(subjects, brand assets, optional web app screenshots). Use this "

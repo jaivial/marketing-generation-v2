@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, asdict
+from typing import Any
 
 from app.services import storage
 
@@ -220,35 +221,68 @@ def cost_per_sec_credits(*, margin: float = DEFAULT_MARGIN) -> float:
 # ---------------------------------------------------------------------------
 # Reservation / refund
 # ---------------------------------------------------------------------------
+def _ledger(store: Any | None = None) -> Any:
+    """The storage backend to bill against.
+
+    Defaults to :mod:`app.services.storage`. Callers that already work
+    against an injected store (the orchestrator, which takes a ``storage=``
+    argument so tests can hand it a fake) pass theirs through so the ledger
+    and the campaign rows can never end up in two different places.
+
+    A store that does not implement the credit ledger at all (e.g. a test
+    double that only records campaigns) is treated as "no billing backend",
+    which is what :func:`ledger_available` reports on.
+    """
+    return store if store is not None else storage
+
+
+def ledger_available(store: Any | None = None) -> bool:
+    """True when ``store`` can actually keep a credit ledger.
+
+    Billing is opt-in on the storage backend: the real module implements it,
+    a minimal fake used by unit tests typically does not. Callers use this to
+    skip charging rather than to crash on a missing attribute.
+    """
+    ledger = _ledger(store)
+    return all(
+        callable(getattr(ledger, name, None))
+        for name in ("get_credit_balance", "apply_credit_delta")
+    )
+
+
 def require_credits(workspace_id: str, base_cost_usd: float, *,
-                    campaign_id: str | None = None) -> float:
+                    campaign_id: str | None = None,
+                    store: Any | None = None) -> float:
     """Pre-flight check + reservation.
 
     Raises :class:`InsufficientCreditsError` when the workspace cannot cover
     ``price_for_user(base_cost_usd)``. Otherwise the price is deducted from
     the ledger and the *new* balance is returned.
     """
+    ledger = _ledger(store)
     price = price_for_user(base_cost_usd)
-    balance = storage.get_credit_balance(workspace_id)
+    balance = ledger.get_credit_balance(workspace_id)
     if balance < price:
         raise InsufficientCreditsError(workspace_id, price, balance)
     reason = f"reserve:{campaign_id}" if campaign_id else "reserve"
-    return storage.apply_credit_delta(workspace_id, delta=-price, reason=reason)
+    return ledger.apply_credit_delta(workspace_id, delta=-price, reason=reason)
 
 
 def refund_reservation(workspace_id: str, amount: float, *,
-                       campaign_id: str | None = None) -> float:
+                       campaign_id: str | None = None,
+                       store: Any | None = None) -> float:
     """Give ``amount`` credits back after a failed / partial generation.
 
     ``amount`` is expressed in *credits* (i.e. the same unit
     :func:`require_credits` deducts). Returns the new balance. A
     non-positive amount is a no-op so callers don't have to guard.
     """
+    ledger = _ledger(store)
     amount = round(float(amount), 2)
     if amount <= 0:
-        return storage.get_credit_balance(workspace_id)
+        return ledger.get_credit_balance(workspace_id)
     reason = f"refund:{campaign_id}" if campaign_id else "refund"
-    return storage.apply_credit_delta(workspace_id, delta=amount, reason=reason)
+    return ledger.apply_credit_delta(workspace_id, delta=amount, reason=reason)
 
 
 # ---------------------------------------------------------------------------

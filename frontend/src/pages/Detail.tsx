@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import TopBar from '../components/TopBar';
 import { cn, timeAgo } from '../lib/utils';
 import { Icon, toast, openModal } from '../components/ui';
+import { ApiError, getCampaign } from '../lib/api';
+import type { CampaignDetail } from '../lib/api';
+import type { Campaign, Frame } from '../lib/types';
 
 const TABS = [
   { id: 'frames',   label: 'Frames' },
@@ -12,28 +15,106 @@ const TABS = [
   { id: 'activity', label: 'Activity' },
 ] as const;
 
+/**
+ * Campaign detail — reads the campaign by id from `GET /api/campaigns/{id}`
+ * and renders the plan, the frame grid, the script, and the final video URL.
+ *
+ * The locally-cached store row (if any) is used for the first paint so
+ * navigating from the Library feels instant; the server payload then fills
+ * in everything the list endpoint doesn't carry (script, every frame URL,
+ * screenshots, per-asset rows). 403/404 from the API map onto distinct
+ * messages so a shared link to somebody else's campaign says so plainly.
+ */
 const Detail: React.FC = () => {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const { history, setHistory } = useStore();
-  const c = history.find(i => i.id === id);
+  const cached = (Array.isArray(history) ? history : []).find(i => i.id === id);
   const [tab, setTab] = useState<typeof TABS[number]['id']>('frames');
+  const [detail, setDetail] = useState<CampaignDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<{ status: number } | null>(null);
 
-  if (!c) {
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const d = await getCampaign(id);
+        if (cancelled) return;
+        setDetail(d);
+        // Keep the shared store in sync so the list pages show the same
+        // status/plan without a second round-trip.
+        setHistory(prev => {
+          const rows = Array.isArray(prev) ? prev : [];
+          const merged: Campaign = {
+            ...(rows.find(r => r.id === id) as Campaign | undefined),
+            ...d.campaign,
+            script: d.plan.script,
+            videoUrl: d.plan.video_url,
+            plan: d.plan.plan as any,
+            frames: d.plan.frames.map((url, i) => ({ i, t: i * 2, url })),
+          };
+          return rows.some(r => r.id === id)
+            ? rows.map(r => (r.id === id ? merged : r))
+            : [merged, ...rows];
+        });
+      } catch (e) {
+        if (!cancelled) {
+          setError({ status: e instanceof ApiError ? e.status : 0 });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id, setHistory]);
+
+  // Prefer the server payload; fall back to the cached list row.
+  const c: Campaign | undefined = detail
+    ? ({ ...(cached || {}), ...detail.campaign } as Campaign)
+    : cached;
+
+  if (loading && !c) {
+    return (
+      <div className="p-8 sm:p-12 text-center text-zinc-500">
+        <Icon name="loader" size={32} className="animate-spin mb-3" strokeWidth={2} />
+        <p className="text-sm">Loading campaign…</p>
+      </div>
+    );
+  }
+
+  if (!c || (error && !detail)) {
+    const forbidden = error?.status === 403;
     return (
       <div className="p-8 sm:p-12 text-center">
-        <Icon name="helpCircle" size={48} className="text-zinc-500 mb-4" strokeWidth={1.5} />
-        <h2 className="text-lg sm:text-xl font-semibold">Campaign not found</h2>
-        <p className="text-sm text-zinc-400 mt-2">The campaign may have been deleted.</p>
+        <Icon name={forbidden ? 'lock' : 'helpCircle'} size={48} className="text-zinc-500 mb-4" strokeWidth={1.5} />
+        <h2 className="text-lg sm:text-xl font-semibold">
+          {forbidden ? 'No access to this campaign' : 'Campaign not found'}
+        </h2>
+        <p className="text-sm text-zinc-400 mt-2">
+          {forbidden
+            ? 'This campaign belongs to another workspace.'
+            : 'The campaign may have been deleted.'}
+        </p>
         <button onClick={() => navigate('/campaigns')} className="btn btn-primary mt-6 text-sm">Back to campaigns</button>
       </div>
     );
   }
 
+  const plan = detail?.plan.plan ?? c.plan ?? null;
+  const script = detail?.plan.script || c.script || '';
+  const videoUrl = detail?.plan.video_url || c.videoUrl || null;
+  const screenshots = detail?.plan.screenshots ?? [];
+  const serverFrames: Frame[] = (detail?.plan.frames ?? []).map((url, i) => ({ i, t: i * 2, url }));
+
   const nFrames = Math.max(2, Math.ceil(c.duration_s / 2));
-  const frames = c.frames && c.frames.length
-    ? c.frames
-    : Array.from({ length: nFrames }, (_, i) => ({ i, t: i * 2, url: null }));
+  const frames: Frame[] = serverFrames.length
+    ? serverFrames
+    : (c.frames && c.frames.length
+      ? c.frames
+      : Array.from({ length: nFrames }, (_, i) => ({ i, t: i * 2, url: null })));
 
   return (
     <>
@@ -51,9 +132,9 @@ const Detail: React.FC = () => {
         <div className="absolute inset-0 flex items-center justify-center">
           <button
             onClick={() => {
-              if (c.videoUrl) {
+              if (videoUrl) {
                 const v: any = document.createElement('video');
-                v.src = c.videoUrl;
+                v.src = videoUrl;
                 v.controls = true;
                 v.autoplay = true;
                 v.className = 'w-full rounded-lg';
@@ -78,11 +159,11 @@ const Detail: React.FC = () => {
               <h1 className="text-base sm:text-3xl font-bold text-white font-display truncate">{c.name}</h1>
               <p className="text-zinc-200 text-[10px] sm:text-sm mt-0.5 sm:mt-1 truncate">
                 {c.duration_s}s · {c.style || 'cinematic'}
-                {c.plan?.tagline ? ` · "${c.plan.tagline}"` : ''}
+                {plan?.tagline ? ` · "${plan.tagline}"` : ''}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => { navigator.clipboard?.writeText(c.videoUrl || ''); toast('Video URL copied', 'success'); }} className="btn bg-white/10 backdrop-blur hover:bg-white/20 text-white border border-white/10 text-xs px-2.5 py-1.5">Share</button>
+              <button onClick={() => { navigator.clipboard?.writeText(videoUrl || ''); toast('Video URL copied', 'success'); }} className="btn bg-white/10 backdrop-blur hover:bg-white/20 text-white border border-white/10 text-xs px-2.5 py-1.5">Share</button>
               <button onClick={() => toast('Export started', 'success')} className="btn bg-white/10 backdrop-blur hover:bg-white/20 text-white border border-white/10 text-xs px-2.5 py-1.5">Export</button>
               <button
                 onClick={() => {
@@ -140,23 +221,58 @@ const Detail: React.FC = () => {
               <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-6">
                 <h3 className="font-semibold text-sm sm:text-base mb-3">Voice-over script</h3>
                 <pre className="whitespace-pre-wrap font-mono text-xs sm:text-sm text-zinc-300 leading-relaxed">
-                  {c.script || (c.plan ? `${c.plan.hook}\n\n${c.plan.tagline}\n\nCall to action: ${c.plan.cta}` : 'No script generated yet.')}
+                  {script || (plan ? `${plan.hook}\n\n${plan.tagline}\n\nCall to action: ${plan.cta}` : 'No script generated yet.')}
                 </pre>
               </div>
             )}
             {tab === 'source' && (
+              <div className="space-y-4">
+              {/* The final render is the single most useful thing on this
+                  page, so we show the URL verbatim (copyable) instead of
+                  hiding it behind the hero play button only. */}
+              <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-5">
+                <h3 className="font-semibold text-sm sm:text-base mb-3">Final video</h3>
+                {videoUrl ? (
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 min-w-0 truncate text-xs bg-zinc-950/60 border border-zinc-800 rounded px-2 py-1.5 text-brand-300">{videoUrl}</code>
+                    <a href={videoUrl} target="_blank" rel="noreferrer" className="btn btn-secondary text-xs px-2.5 py-1.5">
+                      <Icon name="externalLink" size={13} strokeWidth={2} />
+                    </a>
+                    <button
+                      onClick={() => { navigator.clipboard?.writeText(videoUrl); toast('Video URL copied', 'success'); }}
+                      className="btn btn-secondary text-xs px-2.5 py-1.5"
+                    >
+                      <Icon name="copy" size={13} strokeWidth={2} />
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-xs text-zinc-500">Not rendered yet.</p>
+                )}
+                {screenshots.length > 0 && (
+                  <div className="mt-4">
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider mb-2">Screenshots ({screenshots.length})</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {screenshots.map((u, i) => (
+                        <img key={i} src={u} alt={`Screenshot ${i + 1}`} loading="lazy" className="aspect-video w-full object-cover rounded border border-zinc-800" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
                 {[
                   ['Type',     c.source_kind || 'url'],
                   ['Target',   c.source || '—'],
                   ['Style',    c.style || 'cinematic'],
                   ['Created',  timeAgo(c.created_at)],
+                  ['Assets',   String(detail?.assets.length ?? 0)],
                 ].map(([k, v]) => (
                   <div key={k} className="flex items-center justify-between p-3 sm:p-4 text-xs sm:text-sm gap-3">
                     <span className="text-zinc-500 flex-shrink-0">{k}</span>
                     <span className="text-zinc-200 truncate text-right min-w-0">{v}</span>
                   </div>
                 ))}
+              </div>
               </div>
             )}
             {tab === 'activity' && (
@@ -174,15 +290,15 @@ const Detail: React.FC = () => {
         </div>
 
         <div className="lg:col-span-1 space-y-4 sm:space-y-6">
-          {c.plan && (
+          {plan && (
             <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-5">
               <h3 className="font-semibold text-sm sm:text-base mb-3 sm:mb-4">Campaign plan</h3>
               <div className="space-y-3 text-xs sm:text-sm">
-                {planRow('Hook', c.plan.hook)}
-                {planRow('Tagline', c.plan.tagline)}
-                {planRow('CTA', c.plan.cta)}
-                {planRow('Audience', c.plan.audience)}
-                {planRow('Tone', c.plan.tone)}
+                {planRow('Hook', plan.hook || '')}
+                {planRow('Tagline', plan.tagline || '')}
+                {planRow('CTA', plan.cta || '')}
+                {planRow('Audience', plan.audience || '')}
+                {planRow('Tone', plan.tone || '')}
               </div>
             </div>
           )}

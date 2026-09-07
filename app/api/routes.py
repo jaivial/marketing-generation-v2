@@ -19,6 +19,11 @@ from app.core.acl import (
 )
 from app.core.container import orchestrator
 from app.models.schemas import CampaignRequest
+from app.services import storage
+from app.services.campaign_view import (
+    campaign_detail_payload,
+    campaign_summary,
+)
 from app.services.orchestrator import CampaignRequest as Req
 from app.api.billing import (
     router as billing_router,
@@ -62,8 +67,39 @@ def whoami(principal: Principal = Depends(get_current_principal)) -> dict:
 
 
 # \u2500\u2500\u2500 Authenticated \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-def _build_req(req: CampaignRequest) -> Req:
-    """Convert the API DTO into the orchestrator's domain request."""
+def workspace_id_for(principal: Principal) -> str | None:
+    """Resolve the workspace a principal reads and writes campaigns in.
+
+    Every registered user gets a personal workspace at sign-up (see
+    ``app/api/auth.py``), so the owner lookup is enough today. Demo-token
+    principals (and guests) have no workspace at all -- callers must treat
+    ``None`` as "nothing to show".
+    """
+    if not principal.is_authenticated:
+        return None
+    explicit = (principal.extra or {}).get("workspace_id")
+    if explicit:
+        return str(explicit)
+    try:
+        ws = storage.get_workspace_by_owner(principal.id)
+    except Exception:  # noqa: BLE001 -- no DB configured (e.g. unit tests)
+        return None
+    return ws["id"] if ws else None
+
+
+def _build_req(req: CampaignRequest,
+               principal: Principal | None = None) -> Req:
+    """Convert the API DTO into the orchestrator's domain request.
+
+    The workspace serves double duty: it is what the orchestrator charges
+    credits against *and* what it persists the run under. An explicit
+    ``workspace_id`` on the DTO wins (that is what the billing wizard
+    sends); otherwise we resolve it from the caller. When neither yields a
+    workspace the run stays ephemeral and uncharged, exactly as before.
+    """
+    workspace_id = req.workspace_id or (
+        workspace_id_for(principal) if principal else None
+    )
     return Req(
         source_kind=req.source_kind,
         target=req.target,
@@ -72,7 +108,8 @@ def _build_req(req: CampaignRequest) -> Req:
         username=req.username,
         password=req.password,
         allow_screenshots=req.allow_screenshots,
-        workspace_id=req.workspace_id,
+        workspace_id=workspace_id,
+        user_id=principal.id if (principal and workspace_id) else None,
     )
 
 
@@ -83,7 +120,7 @@ async def create_campaign(
 ):
     """Stream the full pipeline as Server-Sent Events."""
     orch = orchestrator()
-    domain_req = _build_req(req)
+    domain_req = _build_req(req, principal)
 
     async def event_gen():
         async for ev in orch.run(domain_req):
@@ -99,7 +136,7 @@ async def create_campaign_sync(
 ):
     """Optional: collect the stream into one JSON response (for non-SSE clients)."""
     orch = orchestrator()
-    domain_req = _build_req(req)
+    domain_req = _build_req(req, principal)
     events: list[dict] = []
     async for ev in orch.run(domain_req):
         events.append(ev)
@@ -112,13 +149,43 @@ async def create_campaign_sync(
 def history(
     principal: Principal = Depends(require_permission(Perm.VIEW_CAMPAIGNS_OWN)),
 ):
-    """Demo history. A real backend would filter by principal.id /
-    tenant_id so users only see their own data; admins see all."""
-    return {"campaigns": [
-        {"id": "c-001", "name": "Acme CMS launch", "duration_s": 30, "status": "done", "created_at": "2h ago", "color": "from-rose-500 to-amber-500"},
-        {"id": "c-002", "name": "Q4 product teaser", "duration_s": 15, "status": "generating", "created_at": "12m ago", "color": "from-indigo-500 to-fuchsia-500"},
-        {"id": "c-003", "name": "Black friday promo", "duration_s": 45, "status": "draft", "created_at": "1d ago", "color": "from-cyan-500 to-blue-500"},
-        {"id": "c-004", "name": "Holiday story", "duration_s": 30, "status": "failed", "created_at": "3d ago", "color": "from-violet-500 to-pink-500"},
-        {"id": "c-005", "name": "SaaS launch v2", "duration_s": 30, "status": "done", "created_at": "5d ago", "color": "from-amber-500 to-orange-500"},
-        {"id": "c-006", "name": "Etsy store promo", "duration_s": 15, "status": "done", "created_at": "1w ago", "color": "from-emerald-500 to-lime-500"},
-    ]}
+    """Real campaign history for the caller's workspace.
+
+    Rows are read from the SQLite store and reshaped into the flat objects
+    the existing ``Campaigns.tsx`` / ``Library.tsx`` tables already expect
+    (``id, name, duration_s, status, created_at, color``). A caller with no
+    workspace -- e.g. a demo-token principal -- simply gets an empty list
+    rather than someone else's data.
+    """
+    workspace_id = workspace_id_for(principal)
+    if not workspace_id:
+        return {"campaigns": []}
+    rows = storage.list_campaigns_for_workspace(workspace_id)
+    return {"campaigns": [campaign_summary(r) for r in rows]}
+
+
+@router.get("/campaigns/{campaign_id}")
+def campaign_detail(
+    campaign_id: str,
+    principal: Principal = Depends(require_permission(Perm.VIEW_CAMPAIGNS_OWN)),
+):
+    """Full campaign record: ``{campaign, plan, assets}``.
+
+    Scoped to the caller's workspace: a campaign that belongs to somebody
+    else is a 403 (it exists, you just can't see it), an id nobody owns is a
+    404. Admins with ``VIEW_CAMPAIGNS_ALL`` bypass the ownership check.
+    """
+    row = storage.get_campaign(campaign_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+
+    workspace_id = workspace_id_for(principal)
+    if row.get("workspace_id") != workspace_id:
+        if not principal.can(Perm.VIEW_CAMPAIGNS_ALL):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="campaign belongs to another workspace",
+            )
+
+    assets = storage.list_campaign_assets(campaign_id)
+    return campaign_detail_payload(row, assets)
