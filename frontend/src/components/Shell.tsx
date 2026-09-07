@@ -3,15 +3,19 @@
 
 import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Sidebar } from './Sidebar';
-import MobileHeader, { deriveTitle, deriveBreadcrumb } from './MobileHeader';
+import MobileHeader, { deriveTitleKey, deriveBreadcrumbKeys } from './MobileHeader';
 import { MobileDrawer } from './MobileDrawer';
 import BottomNav from './BottomNav';
 import { ToastContainer } from './ui';
+import LanguageSwitcher from './LanguageSwitcher';
 import { useStore } from '../lib/store';
+import { getStoredLanguage, loadLanguage } from '../lib/i18n';
 
 const Shell: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
+  const { t } = useTranslation();
   const { drawerOpen } = useStore();
 
   // Close drawer on route change.
@@ -19,6 +23,12 @@ const Shell: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
   React.useEffect(() => {
     setDrawerOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  // Re-apply the persisted language on every navigation, so a language picked
+  // in another tab (or before a hard reload) is always honoured.
+  React.useEffect(() => {
+    loadLanguage(getStoredLanguage());
   }, [location.pathname]);
 
   // Routes that don't need the shell wrapper (e.g. landing, pricing).
@@ -34,8 +44,8 @@ const Shell: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
     );
   }
 
-  const title = deriveTitle(location.pathname);
-  const breadcrumb = deriveBreadcrumb(location.pathname);
+  const title = t(deriveTitleKey(location.pathname));
+  const breadcrumb = deriveBreadcrumbKeys(location.pathname);
 
   return (
     <div className="flex bg-zinc-950 h-[100dvh] min-h-screen overflow-hidden">
@@ -43,6 +53,10 @@ const Shell: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
       <MobileDrawer />
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto overscroll-none">
         <MobileHeader title={title} breadcrumb={breadcrumb || undefined} />
+        {/* Language switcher — top-right of the content area (md+). */}
+        <div className="hidden md:flex justify-end px-8 pt-4 -mb-2">
+          <LanguageSwitcher />
+        </div>
         <main className="flex-1 px-3 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8 max-w-7xl w-full page-enter overflow-x-hidden pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-8">
           <Outlet />
         </main>

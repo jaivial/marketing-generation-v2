@@ -1,23 +1,26 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Icon, Logo } from '../components/ui';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 import { toast } from '../components/ui';
 import { cn } from '../lib/utils';
 
 const PLANS = [
-  { id: 'free', name: 'Free', desc: 'For tinkering', price: '$0', sub: 'forever',
-    features: ['5 campaigns / month', '15s max duration', 'Standard models', 'Community support', 'Watermarked exports'],
-    cta: 'Current plan', primary: false, current: true },
-  { id: 'pro', name: 'Pro', desc: 'For creators & marketers', price: '$49', sub: '/mo + usage',
-    features: ['50 campaigns / month', '45s max duration', 'All models', 'Priority queue', 'No watermark', 'Brand kit + custom fonts'],
-    cta: 'Upgrade to Pro', primary: true },
-  { id: 'team', name: 'Team', desc: 'For agencies & teams', price: '$199', sub: '/mo + usage',
-    features: ['Unlimited campaigns', 'Up to 60s duration', 'Up to 10 seats', 'Team library & roles', 'SSO + audit log', 'Dedicated CSM'],
-    cta: 'Contact sales', primary: false },
+  { id: 'free', nameKey: 'pricing.plans.free.name', descKey: 'pricing.plans.free.desc', price: '$0', subKey: 'pricing.plans.free.sub',
+    featureKeys: ['pricing.plans.free.features.campaigns', 'pricing.plans.free.features.duration', 'pricing.plans.free.features.models', 'pricing.plans.free.features.support', 'pricing.plans.free.features.watermark'],
+    ctaKey: 'pricing.plans.free.cta', primary: false, current: true },
+  { id: 'pro', nameKey: 'pricing.plans.pro.name', descKey: 'pricing.plans.pro.desc', price: '$49', subKey: 'pricing.plans.pro.sub',
+    featureKeys: ['pricing.plans.pro.features.campaigns', 'pricing.plans.pro.features.duration', 'pricing.plans.pro.features.models', 'pricing.plans.pro.features.queue', 'pricing.plans.pro.features.watermark', 'pricing.plans.pro.features.brandkit'],
+    ctaKey: 'pricing.plans.pro.cta', primary: true },
+  { id: 'team', nameKey: 'pricing.plans.team.name', descKey: 'pricing.plans.team.desc', price: '$199', subKey: 'pricing.plans.team.sub',
+    featureKeys: ['pricing.plans.team.features.campaigns', 'pricing.plans.team.features.duration', 'pricing.plans.team.features.seats', 'pricing.plans.team.features.library', 'pricing.plans.team.features.sso', 'pricing.plans.team.features.csm'],
+    ctaKey: 'pricing.plans.team.cta', primary: false },
 ];
 
 const Pricing: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [yearly, setYearly] = useState(false);
 
   return (
@@ -28,22 +31,23 @@ const Pricing: React.FC = () => {
             <Logo />
           </Link>
           <nav className="hidden md:flex gap-6 text-sm text-zinc-400">
-            <Link to="/dashboard" className="hover:text-white">Dashboard</Link>
-            <Link to="/campaigns" className="hover:text-white">Campaigns</Link>
-            <Link to="/library" className="hover:text-white">Library</Link>
-            <Link to="/pricing" className="text-white">Pricing</Link>
+            <Link to="/dashboard" className="hover:text-white">{t('pricing.nav.dashboard')}</Link>
+            <Link to="/campaigns" className="hover:text-white">{t('pricing.nav.campaigns')}</Link>
+            <Link to="/library" className="hover:text-white">{t('pricing.nav.library')}</Link>
+            <Link to="/pricing" className="text-white">{t('pricing.nav.pricing')}</Link>
           </nav>
-          <button onClick={() => navigate('/new')} className="btn btn-primary text-xs sm:text-sm px-3 py-1.5">Start free</button>
+          <LanguageSwitcher />
+          <button onClick={() => navigate('/new')} className="btn btn-primary text-xs sm:text-sm px-3 py-1.5">{t('pricing.nav.startFree')}</button>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-10 sm:py-16 animate-fade-in">
         <div className="text-center">
-          <h1 className="text-2xl sm:text-4xl font-bold font-display">Simple, usage-based pricing</h1>
-          <p className="text-zinc-400 mt-2 sm:mt-3 text-sm sm:text-base">Start free. Scale as you grow. No seat fees.</p>
+          <h1 className="text-2xl sm:text-4xl font-bold font-display">{t('pricing.title')}</h1>
+          <p className="text-zinc-400 mt-2 sm:mt-3 text-sm sm:text-base">{t('pricing.subtitle')}</p>
           <div className="inline-flex items-center gap-1 bg-zinc-900 border border-zinc-800 rounded-lg p-1 mt-4 sm:mt-6 text-xs sm:text-sm">
-            <button onClick={() => setYearly(false)} className={cn('px-3 py-1.5 rounded transition', !yearly ? 'bg-brand-500 text-white' : 'text-zinc-400')}>Monthly</button>
-            <button onClick={() => setYearly(true)} className={cn('px-3 py-1.5 rounded transition', yearly ? 'bg-brand-500 text-white' : 'text-zinc-400')}>Yearly · save 20%</button>
+            <button onClick={() => setYearly(false)} className={cn('px-3 py-1.5 rounded transition', !yearly ? 'bg-brand-500 text-white' : 'text-zinc-400')}>{t('pricing.monthly')}</button>
+            <button onClick={() => setYearly(true)} className={cn('px-3 py-1.5 rounded transition', yearly ? 'bg-brand-500 text-white' : 'text-zinc-400')}>{t('pricing.yearly')}</button>
           </div>
         </div>
 
@@ -54,26 +58,26 @@ const Pricing: React.FC = () => {
             const price = yearly && p.price !== '$0' ? '$' + Math.round(parseInt(p.price.slice(1)) * 0.8) : p.price;
             return (
               <div key={p.id} className={cn('rounded-xl sm:rounded-2xl p-5 sm:p-6 relative', isPrimary ? 'gradient-border bg-gradient-to-br from-brand-500/10 to-fuchsia-500/10 shadow-2xl shadow-brand-950/30 sm:scale-[1.02]' : 'bg-zinc-900/60 border border-zinc-800')}>
-                {isPrimary && <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold gradient-bg text-white px-2 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap">Most popular</span>}
-                <h3 className="font-semibold text-base sm:text-lg">{p.name}</h3>
-                <p className="text-[11px] sm:text-xs text-zinc-500 mt-1">{p.desc}</p>
+                {isPrimary && <span className="absolute -top-3 left-1/2 -translate-x-1/2 text-[10px] font-semibold gradient-bg text-white px-2 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap">{t('pricing.mostPopular')}</span>}
+                <h3 className="font-semibold text-base sm:text-lg">{t(p.nameKey)}</h3>
+                <p className="text-[11px] sm:text-xs text-zinc-500 mt-1">{t(p.descKey)}</p>
                 <div className="mt-4 sm:mt-5 flex items-baseline gap-1">
                   <span className="text-3xl sm:text-4xl font-bold font-display">{price}</span>
-                  <span className="text-zinc-500 text-xs sm:text-sm">{p.sub}</span>
+                  <span className="text-zinc-500 text-xs sm:text-sm">{t(p.subKey)}</span>
                 </div>
                 <button
                   disabled={isCurrent}
                   onClick={() => {
-                    if (p.id === 'team') { toast('Sales will reach out shortly', 'info'); return; }
-                    toast(`Upgraded to ${p.name} (demo)`, 'success');
+                    if (p.id === 'team') { toast(t('pricing.toast.contactSales'), 'info'); return; }
+                    toast(t('pricing.toast.upgraded', { plan: t(p.nameKey) }), 'success');
                   }}
                   className={cn('w-full mt-4 sm:mt-5 btn text-xs sm:text-sm', isCurrent ? 'btn-secondary' : isPrimary ? 'btn-primary' : 'btn-secondary')}
-                >{p.cta}</button>
+                >{t(p.ctaKey)}</button>
                 <ul className="mt-5 sm:mt-6 space-y-2 sm:space-y-2.5 text-xs sm:text-sm text-zinc-300">
-                  {p.features.map(f => (
-                    <li key={f} className="flex gap-2">
+                  {p.featureKeys.map(fk => (
+                    <li key={fk} className="flex gap-2">
                       <Icon name="check" size={16} className="text-emerald-400 flex-shrink-0" strokeWidth={3} />
-                      <span>{f}</span>
+                      <span>{t(fk)}</span>
                     </li>
                   ))}
                 </ul>
@@ -83,17 +87,12 @@ const Pricing: React.FC = () => {
         </div>
 
         <div className="mt-12 sm:mt-16 bg-zinc-900/60 border border-zinc-800 rounded-xl sm:rounded-2xl p-5 sm:p-8">
-          <h2 className="text-lg sm:text-xl font-semibold text-center">Frequently asked questions</h2>
+          <h2 className="text-lg sm:text-xl font-semibold text-center">{t('pricing.faq.title')}</h2>
           <div className="mt-5 sm:mt-6 grid grid-cols-1 sm:grid-cols-2 gap-x-6 sm:gap-x-8 gap-y-5 sm:gap-y-6">
-            {['How is "usage" billed?','Can I cancel anytime?','Do you offer custom durations?','Is my data used for training?'].map((q, i) => (
-              <div key={q}>
-                <p className="font-medium text-sm sm:text-base">{q}</p>
-                <p className="text-xs sm:text-sm text-zinc-400 mt-1">
-                  {i === 0 ? 'Per-token for chat models, per-second for video. Itemized invoice every month.' :
-                   i === 1 ? 'Yes — your subscription ends at the period, no questions asked.' :
-                   i === 2 ? 'On the Team plan, durations up to 60s are supported. Contact us for longer.' :
-                             'No. Your inputs and outputs are never used to train models.'}
-                </p>
+            {[1, 2, 3, 4].map(n => (
+              <div key={n}>
+                <p className="font-medium text-sm sm:text-base">{t(`pricing.faq.q${n}`)}</p>
+                <p className="text-xs sm:text-sm text-zinc-400 mt-1">{t(`pricing.faq.a${n}`)}</p>
               </div>
             ))}
           </div>

@@ -3,35 +3,37 @@
 
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth, useStore } from '../lib/store';
 import { Logo, Icon, type IconName } from './ui';
 import { cn } from '../lib/utils';
 
 interface NavItem {
   path: string;
-  label: string;
+  labelKey: string;
   icon: IconName;
 }
 
 const NAV: NavItem[] = [
-  { path: '/',              label: 'Dashboard',     icon: 'dashboard' },
-  { path: '/campaigns',     label: 'Campaigns',     icon: 'campaigns' },
-  { path: '/new',           label: 'New campaign',  icon: 'plus' },
-  { path: '/library',       label: 'Library',       icon: 'library' },
-  { path: '/integrations',  label: 'Integrations',  icon: 'integrations' },
-  { path: '/analytics',     label: 'Analytics',     icon: 'analytics' },
-  { path: '/settings',      label: 'Settings',      icon: 'settings' },
+  { path: '/',              labelKey: 'nav.dashboard',    icon: 'dashboard' },
+  { path: '/campaigns',     labelKey: 'nav.campaigns',    icon: 'campaigns' },
+  { path: '/new',           labelKey: 'nav.newCampaign',  icon: 'plus' },
+  { path: '/library',       labelKey: 'nav.library',      icon: 'library' },
+  { path: '/integrations',  labelKey: 'nav.integrations', icon: 'integrations' },
+  { path: '/analytics',     labelKey: 'nav.analytics',    icon: 'analytics' },
+  { path: '/settings',      labelKey: 'nav.settings',     icon: 'settings' },
 ];
 
 const ADMIN_NAV: NavItem[] = [
-  { path: '/admin/users',  label: 'Users',      icon: 'users' },
-  { path: '/admin/system', label: 'System',     icon: 'settings' },
-  { path: '/admin/logs',   label: 'Logs',       icon: 'activity' },
-  { path: '/admin/acl',    label: 'ACL Matrix', icon: 'shieldCheck' },
+  { path: '/admin/users',  labelKey: 'nav.users',     icon: 'users' },
+  { path: '/admin/system', labelKey: 'nav.system',    icon: 'settings' },
+  { path: '/admin/logs',   labelKey: 'nav.logs',      icon: 'activity' },
+  { path: '/admin/acl',    labelKey: 'nav.aclMatrix', icon: 'shieldCheck' },
 ];
 
 export const Sidebar: React.FC = () => {
   const location = useLocation();
+  const { t } = useTranslation();
   const { isRoot } = useAuth();
   const { user, sidebarCollapsed, setSidebarCollapsed } = useStore();
 
@@ -62,8 +64,8 @@ export const Sidebar: React.FC = () => {
           <button
             onClick={() => setSidebarCollapsed(b => !b)}
             className="flex items-center justify-center w-8 h-8 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 transition-colors flex-shrink-0"
-            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={sidebarCollapsed ? 'Expand sidebar (more room)' : 'Collapse sidebar (more room for content)'}
+            aria-label={sidebarCollapsed ? t('nav.expandSidebar') : t('nav.collapseSidebar')}
+            title={sidebarCollapsed ? t('nav.expandSidebarHint') : t('nav.collapseSidebarHint')}
           >
             <Icon name={sidebarCollapsed ? 'chevronDoubleRight' : 'chevronDoubleLeft'} size={16} strokeWidth={2.2} />
           </button>
@@ -84,10 +86,10 @@ export const Sidebar: React.FC = () => {
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent',
                   sidebarCollapsed && 'justify-center px-0'
                 )}
-                title={sidebarCollapsed ? item.label : undefined}
+                title={sidebarCollapsed ? t(item.labelKey) : undefined}
               >
                 <Icon name={item.icon} size={18} />
-                {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                {!sidebarCollapsed && <span className="truncate">{t(item.labelKey)}</span>}
               </Link>
             );
           })}
@@ -100,7 +102,7 @@ export const Sidebar: React.FC = () => {
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs font-semibold text-brand-300 capitalize flex items-center gap-1.5">
                   <Icon name="crown" size={12} />
-                  {user.plan} plan
+                  {t('nav.planLabel', { plan: user.plan })}
                 </p>
                 <p className="text-xs text-zinc-400">{user.usage} / {user.limit}</p>
               </div>
@@ -108,14 +110,14 @@ export const Sidebar: React.FC = () => {
                 <div className="h-full gradient-bg" style={{ width: `${usagePct}%` }} />
               </div>
               <Link to="/pricing" className="block text-center text-xs bg-zinc-100 text-zinc-900 font-medium py-1.5 rounded-lg hover:bg-white transition">
-                Upgrade
+                {t('nav.upgrade')}
               </Link>
             </div>
           )}
           {isRoot && (
           <div className="pt-1 border-t border-zinc-800/60 space-y-0.5">
             {!sidebarCollapsed && (
-              <p className="text-[10px] uppercase tracking-wider text-rose-400/80 px-2 py-1">Admin</p>
+              <p className="text-[10px] uppercase tracking-wider text-rose-400/80 px-2 py-1">{t('nav.admin')}</p>
             )}
             {ADMIN_NAV.map(item => (
               <Link
@@ -128,10 +130,10 @@ export const Sidebar: React.FC = () => {
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent',
                   sidebarCollapsed && 'justify-center'
                 )}
-                title={sidebarCollapsed ? item.label : undefined}
+                title={sidebarCollapsed ? t(item.labelKey) : undefined}
               >
                 <Icon name={item.icon} size={18} />
-                {!sidebarCollapsed && <span>{item.label}</span>}
+                {!sidebarCollapsed && <span>{t(item.labelKey)}</span>}
               </Link>
             ))}
           </div>
@@ -153,11 +155,11 @@ export const Sidebar: React.FC = () => {
         <button
           onClick={() => setSidebarCollapsed(false)}
           className="hidden md:flex fixed top-3 left-20 z-30 h-9 px-3 rounded-lg bg-zinc-900 border border-zinc-700 text-zinc-200 hover:text-white hover:bg-zinc-800 hover:border-brand-500/50 items-center gap-2 shadow-lg font-medium text-sm animate-fade-in"
-          aria-label="Expand sidebar"
-          title="Expand sidebar"
+          aria-label={t('nav.expandSidebar')}
+          title={t('nav.expandSidebar')}
         >
           <Icon name="menu" size={18} />
-          <span>Menu</span>
+          <span>{t('nav.menu')}</span>
         </button>
       )}
     </>

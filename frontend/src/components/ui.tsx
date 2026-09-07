@@ -1,6 +1,7 @@
 // Small reusable UI primitives — all icons use Lucide React.
 
 import React, { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../lib/store';
 import type { ToastMessage } from '../lib/types';
 
@@ -189,16 +190,17 @@ export const ToastContainer: React.FC = () => {
 
 // ─── Pill ───────────────────────────────────────────────────────────────
 export const Pill: React.FC<{ status: string }> = ({ status }) => {
+  const { t } = useTranslation();
   const meta = {
-    done:        { cls: 'pill-success', label: 'Done' },
-    generating:  { cls: 'pill-warn',    label: 'Generating', dot: true },
-    draft:       { cls: 'pill-neutral', label: 'Draft' },
-    failed:      { cls: 'pill-error',   label: 'Failed' },
-  }[status] || { cls: 'pill-neutral', label: status };
+    done:        { cls: 'pill-success', key: 'status.done' },
+    generating:  { cls: 'pill-warn',    key: 'status.generating', dot: true },
+    draft:       { cls: 'pill-neutral', key: 'status.draft' },
+    failed:      { cls: 'pill-error',   key: 'status.failed' },
+  }[status] || { cls: 'pill-neutral', key: '' };
   return (
     <span className={`pill ${meta.cls}`}>
       {(meta as any).dot && <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />}
-      {meta.label}
+      {meta.key ? t(meta.key) : status}
     </span>
   );
 };

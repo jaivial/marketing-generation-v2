@@ -1,21 +1,23 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../lib/store';
 import TopBar from '../components/TopBar';
 import { Icon, Pill } from '../components/ui';
 import { cn, timeAgo } from '../lib/utils';
 
 const TABS = [
-  { id: 'all',        label: 'All' },
-  { id: 'done',       label: 'Done' },
-  { id: 'generating', label: 'Generating' },
-  { id: 'draft',      label: 'Drafts' },
-  { id: 'failed',     label: 'Failed' },
+  { id: 'all',        labelKey: 'campaigns.tabs.all' },
+  { id: 'done',       labelKey: 'campaigns.tabs.done' },
+  { id: 'generating', labelKey: 'campaigns.tabs.generating' },
+  { id: 'draft',      labelKey: 'campaigns.tabs.draft' },
+  { id: 'failed',     labelKey: 'campaigns.tabs.failed' },
 ] as const;
 
 const Campaigns: React.FC = () => {
   const { history } = useStore();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [filter, setFilter] = useState<typeof TABS[number]['id']>('all');
   const [query, setQuery] = useState('');
 
@@ -32,27 +34,27 @@ const Campaigns: React.FC = () => {
   return (
     <>
       <TopBar
-        title="Campaigns"
+        title={t('campaigns.title')}
         actions={[
           <button key="new" onClick={() => navigate('/new')} className="btn btn-primary text-xs sm:text-sm px-3 sm:px-4 py-2">
             <Icon name="plus" size={14} strokeWidth={2.2} />
-            <span className="hidden sm:inline">New</span>
+            <span className="hidden sm:inline">{t('campaigns.new')}</span>
           </button>,
         ]}
       />
 
       <div className="border-b border-zinc-800 mb-4 sm:mb-6 -mx-3 px-3 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-thin">
         <nav className="flex gap-4 sm:gap-6 text-sm whitespace-nowrap">
-          {TABS.map(t => {
-            const active = filter === t.id;
-            const count = t.id === 'all' ? history.length : history.filter(i => i.status === t.id).length;
+          {TABS.map(tab => {
+            const active = filter === tab.id;
+            const count = tab.id === 'all' ? history.length : history.filter(i => i.status === tab.id).length;
             return (
               <button
-                key={t.id}
-                onClick={() => setFilter(t.id)}
+                key={tab.id}
+                onClick={() => setFilter(tab.id)}
                 className={cn('py-3 border-b-2', active ? 'border-brand-500 text-brand-300 font-medium' : 'border-transparent text-zinc-400 hover:text-white')}
               >
-                {t.label} <span className={cn('ml-1', active ? 'text-brand-400/70' : 'text-zinc-600')}>{count}</span>
+                {t(tab.labelKey)} <span className={cn('ml-1', active ? 'text-brand-400/70' : 'text-zinc-600')}>{count}</span>
               </button>
             );
           })}
@@ -63,7 +65,7 @@ const Campaigns: React.FC = () => {
         <Icon name="search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" strokeWidth={2} />
         <input
           className="input pl-9"
-          placeholder="Search campaigns…"
+          placeholder={t('campaigns.search.placeholder')}
           value={query}
           onChange={e => setQuery(e.target.value)}
         />
@@ -73,8 +75,8 @@ const Campaigns: React.FC = () => {
         {items.length === 0 ? (
           <div className="p-8 sm:p-12 text-center text-zinc-500">
             <Icon name="search" size={36} className="text-zinc-500 mb-3" strokeWidth={1.5} />
-            <p className="text-sm">No campaigns match your filters.</p>
-            <button onClick={() => navigate('/new')} className="btn btn-secondary mt-4 text-sm">Create your first</button>
+            <p className="text-sm">{t('campaigns.empty.title')}</p>
+            <button onClick={() => navigate('/new')} className="btn btn-secondary mt-4 text-sm">{t('campaigns.empty.cta')}</button>
           </div>
         ) : (
           <>
@@ -83,11 +85,11 @@ const Campaigns: React.FC = () => {
               <table className="w-full text-sm">
                 <thead className="text-xs text-zinc-500 uppercase tracking-wider">
                   <tr className="border-b border-zinc-800/50">
-                    <th className="text-left px-5 py-3 font-medium">Name</th>
-                    <th className="text-left px-5 py-3 font-medium">Source</th>
-                    <th className="text-left px-5 py-3 font-medium">Duration</th>
-                    <th className="text-left px-5 py-3 font-medium">Status</th>
-                    <th className="text-left px-5 py-3 font-medium">Created</th>
+                    <th className="text-left px-5 py-3 font-medium">{t('campaigns.table.name')}</th>
+                    <th className="text-left px-5 py-3 font-medium">{t('campaigns.table.source')}</th>
+                    <th className="text-left px-5 py-3 font-medium">{t('campaigns.table.duration')}</th>
+                    <th className="text-left px-5 py-3 font-medium">{t('campaigns.table.status')}</th>
+                    <th className="text-left px-5 py-3 font-medium">{t('campaigns.table.created')}</th>
                     <th className="text-right px-5 py-3 font-medium" />
                   </tr>
                 </thead>

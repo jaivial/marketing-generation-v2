@@ -3,30 +3,32 @@
 
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../lib/store';
 import { Icon, Logo, type IconName } from './ui';
 import { cn } from '../lib/utils';
 
 interface NavItem {
   path: string;
-  label: string;
+  labelKey: string;
   icon: IconName;
 }
 
 const NAV: NavItem[] = [
-  { path: '/',              label: 'Dashboard',     icon: 'dashboard' },
-  { path: '/campaigns',     label: 'Campaigns',     icon: 'campaigns' },
-  { path: '/new',           label: 'New campaign',  icon: 'plus' },
-  { path: '/library',       label: 'Library',       icon: 'library' },
-  { path: '/integrations',  label: 'Integrations',  icon: 'integrations' },
-  { path: '/analytics',     label: 'Analytics',     icon: 'analytics' },
-  { path: '/settings',      label: 'Settings',      icon: 'settings' },
-  { path: '/pricing',       label: 'Pricing',       icon: 'creditCard' },
+  { path: '/',              labelKey: 'nav.dashboard',    icon: 'dashboard' },
+  { path: '/campaigns',     labelKey: 'nav.campaigns',    icon: 'campaigns' },
+  { path: '/new',           labelKey: 'nav.newCampaign',  icon: 'plus' },
+  { path: '/library',       labelKey: 'nav.library',      icon: 'library' },
+  { path: '/integrations',  labelKey: 'nav.integrations', icon: 'integrations' },
+  { path: '/analytics',     labelKey: 'nav.analytics',    icon: 'analytics' },
+  { path: '/settings',      labelKey: 'nav.settings',     icon: 'settings' },
+  { path: '/pricing',       labelKey: 'nav.pricing',      icon: 'creditCard' },
 ];
 
 export const MobileDrawer: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const { user, drawerOpen, setDrawerOpen } = useStore();
 
   // Lock body scroll while the drawer is open.
@@ -72,7 +74,7 @@ export const MobileDrawer: React.FC = () => {
         )}
         role="dialog"
         aria-modal="true"
-        aria-label="Navigation menu"
+        aria-label={t('nav.navigationMenu')}
       >
         {/* Header */}
         <div className="h-14 px-3 flex items-center justify-between border-b border-zinc-800 flex-shrink-0">
@@ -80,7 +82,7 @@ export const MobileDrawer: React.FC = () => {
           <button
             onClick={close}
             className="flex items-center justify-center w-8 h-8 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-800"
-            aria-label="Close menu"
+            aria-label={t('nav.closeMenu')}
           >
             <Icon name="close" size={18} />
           </button>
@@ -93,7 +95,7 @@ export const MobileDrawer: React.FC = () => {
             className="w-full btn btn-primary justify-center"
           >
             <Icon name="plus" size={16} />
-            <span>New campaign</span>
+            <span>{t('nav.newCampaign')}</span>
           </button>
         </div>
 
@@ -114,7 +116,7 @@ export const MobileDrawer: React.FC = () => {
                 )}
               >
                 <Icon name={item.icon} size={18} />
-                <span className="truncate">{item.label}</span>
+                <span className="truncate">{t(item.labelKey)}</span>
               </Link>
             );
           })}

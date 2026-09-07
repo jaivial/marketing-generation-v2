@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Icon } from './components/ui';
 import { StoreProvider } from './lib/store';
 import Shell from './components/Shell';
@@ -23,13 +24,14 @@ import { RequirePermission } from './lib/guard';
 
 const NotFound: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
       <div className="text-center">
         <Icon name="helpCircle" size={48} className="text-zinc-500 mb-4" strokeWidth={1.5} />
-        <h1 className="text-2xl font-semibold">Page not found</h1>
-        <p className="text-zinc-400 mt-2">The page you're looking for doesn't exist.</p>
-        <button onClick={() => navigate('/')} className="btn btn-primary mt-6 text-sm">Back to home</button>
+        <h1 className="text-2xl font-semibold">{t('notFound.title')}</h1>
+        <p className="text-zinc-400 mt-2">{t('notFound.desc')}</p>
+        <button onClick={() => navigate('/')} className="btn btn-primary mt-6 text-sm">{t('notFound.cta')}</button>
       </div>
     </div>
   );

@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../lib/store';
 import { Icon } from '../components/ui';
 import TopBar from '../components/TopBar';
 import { cn, timeAgo } from '../lib/utils';
 
 const TABS = [
-  { id: 'all',     label: 'All' },
-  { id: 'video',   label: 'Videos' },
-  { id: 'frames',  label: 'Frames' },
-  { id: 'scripts', label: 'Scripts' },
+  { id: 'all',     labelKey: 'library.tabs.all' },
+  { id: 'video',   labelKey: 'library.tabs.video' },
+  { id: 'frames',  labelKey: 'library.tabs.frames' },
+  { id: 'scripts', labelKey: 'library.tabs.scripts' },
 ] as const;
 
 const Library: React.FC = () => {
   const { history } = useStore();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [tab, setTab] = useState<typeof TABS[number]['id']>('all');
   const [query, setQuery] = useState('');
 
@@ -27,17 +29,17 @@ const Library: React.FC = () => {
 
   return (
     <>
-      <TopBar title="Library" />
-      <p className="text-xs sm:text-sm text-zinc-400 -mt-4 sm:-mt-6 mb-4 sm:mb-6">All your generated assets in one place.</p>
+      <TopBar title={t('library.title')} />
+      <p className="text-xs sm:text-sm text-zinc-400 -mt-4 sm:-mt-6 mb-4 sm:mb-6">{t('library.subtitle')}</p>
 
       <div className="border-b border-zinc-800 mb-4 sm:mb-6 -mx-3 px-3 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-thin">
         <nav className="flex gap-4 sm:gap-6 text-sm whitespace-nowrap">
-          {TABS.map(t => {
-            const active = tab === t.id;
+          {TABS.map(item => {
+            const active = tab === item.id;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)} className={cn('py-3 border-b-2', active ? 'border-brand-500 text-brand-300 font-medium' : 'border-transparent text-zinc-400 hover:text-white')}>
-                {t.label} <span className={cn('ml-1', active ? 'text-brand-400/70' : 'text-zinc-600')}>
-                  {t.id === 'all' ? items.length : t.id === 'frames' ? items.reduce((acc, i) => acc + Math.max(2, Math.ceil(i.duration_s/2)), 0) : items.length}
+              <button key={item.id} onClick={() => setTab(item.id)} className={cn('py-3 border-b-2', active ? 'border-brand-500 text-brand-300 font-medium' : 'border-transparent text-zinc-400 hover:text-white')}>
+                {t(item.labelKey)} <span className={cn('ml-1', active ? 'text-brand-400/70' : 'text-zinc-600')}>
+                  {item.id === 'all' ? items.length : item.id === 'frames' ? items.reduce((acc, i) => acc + Math.max(2, Math.ceil(i.duration_s/2)), 0) : items.length}
                 </span>
               </button>
             );
@@ -48,12 +50,12 @@ const Library: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
         <div className="relative flex-1 sm:max-w-md">
           <Icon name="search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" strokeWidth={2} />
-          <input className="input pl-9" placeholder="Search assets…" value={query} onChange={e => setQuery(e.target.value)} />
+          <input className="input pl-9" placeholder={t('library.search.placeholder')} value={query} onChange={e => setQuery(e.target.value)} />
         </div>
         <div className="flex gap-2">
           <button onClick={() => navigate('/new')} className="btn btn-primary text-xs sm:text-sm">
             <Icon name="plus" size={14} strokeWidth={2.2} />
-            <span className="hidden sm:inline">Generate</span>
+            <span className="hidden sm:inline">{t('library.generate')}</span>
           </button>
         </div>
       </div>
@@ -61,8 +63,8 @@ const Library: React.FC = () => {
       {filtered.length === 0 ? (
         <div className="col-span-full p-8 sm:p-12 text-center text-zinc-500">
           <Icon name="video" size={36} className="text-zinc-500 mb-3" strokeWidth={1.5} />
-          <p className="text-sm">No assets yet — generate your first campaign.</p>
-          <button onClick={() => navigate('/new')} className="btn btn-primary mt-4 text-sm">Generate</button>
+          <p className="text-sm">{t('library.empty.title')}</p>
+          <button onClick={() => navigate('/new')} className="btn btn-primary mt-4 text-sm">{t('library.empty.cta')}</button>
         </div>
       ) : (
         <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -80,7 +82,7 @@ const Library: React.FC = () => {
               </div>
               <div className="p-3">
                 <p className="text-sm font-medium truncate">{c.name}</p>
-                <p className="text-[10px] sm:text-xs text-zinc-500 mt-1">{timeAgo(c.created_at)} · {Math.max(2, Math.ceil(c.duration_s/2))} frames</p>
+                <p className="text-[10px] sm:text-xs text-zinc-500 mt-1">{timeAgo(c.created_at)} · {t('library.card.frames', { count: Math.max(2, Math.ceil(c.duration_s/2)) })}</p>
               </div>
             </div>
           ))}

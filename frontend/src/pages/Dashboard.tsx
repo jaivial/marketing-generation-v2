@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../lib/store';
 import TopBar from '../components/TopBar';
 import { Icon, type IconName, Pill } from '../components/ui';
@@ -9,6 +10,7 @@ import type { Campaign } from '../lib/types';
 const Dashboard: React.FC = () => {
   const { user, history } = useStore();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const items = [...history].sort((a, b) => b.created_at - a.created_at);
   const done = items.filter(i => i.status === 'done').length;
@@ -17,25 +19,25 @@ const Dashboard: React.FC = () => {
   const successRate = items.length ? Math.round((done / items.length) * 100) : 0;
 
   const stats = [
-    { label: 'Total campaigns', value: items.length, delta: '+2 this week',  icon: 'barChart3' as IconName, color: 'from-brand-500 to-fuchsia-500' },
-    { label: 'Frames generated', value: totalFrames, delta: '+47 today',  icon: 'image' as IconName, color: 'from-cyan-500 to-blue-500' },
-    { label: 'Video duration',   value: `${totalDuration}s`, delta: '+30s today', icon: 'video' as IconName, color: 'from-emerald-500 to-teal-500' },
-    { label: 'Success rate',     value: `${successRate}%`, delta: '+4% vs last month', icon: 'trendingUp' as IconName, color: 'from-amber-500 to-orange-500' },
+    { label: t('dashboard.stats.totalCampaigns'),  value: items.length,       delta: t('dashboard.stats.totalCampaigns.delta'),  icon: 'barChart3' as IconName,  color: 'from-brand-500 to-fuchsia-500' },
+    { label: t('dashboard.stats.framesGenerated'), value: totalFrames,        delta: t('dashboard.stats.framesGenerated.delta'), icon: 'image' as IconName,      color: 'from-cyan-500 to-blue-500' },
+    { label: t('dashboard.stats.videoDuration'),   value: `${totalDuration}s`, delta: t('dashboard.stats.videoDuration.delta'),  icon: 'video' as IconName,      color: 'from-emerald-500 to-teal-500' },
+    { label: t('dashboard.stats.successRate'),     value: `${successRate}%`,  delta: t('dashboard.stats.successRate.delta'),     icon: 'trendingUp' as IconName, color: 'from-amber-500 to-orange-500' },
   ];
 
   return (
     <>
       <TopBar
-        title={<>Welcome back, {user.name} <Icon name={"hand" as IconName} size={20} className="inline -mt-1" /></>}
+        title={<>{t('dashboard.welcome', { name: user.name })} <Icon name={"hand" as IconName} size={20} className="inline -mt-1" /></>}
         actions={[
           <button key="new" onClick={() => navigate('/new')} className="btn btn-primary text-xs sm:text-sm px-3 sm:px-4 py-2">
             <Icon name="plus" size={14} strokeWidth={2.2} />
-            <span className="hidden sm:inline">New campaign</span>
-            <span className="sm:hidden">New</span>
+            <span className="hidden sm:inline">{t('dashboard.newCampaign')}</span>
+            <span className="sm:hidden">{t('dashboard.new')}</span>
           </button>,
         ]}
       />
-      <p className="text-xs sm:text-sm text-zinc-400 -mt-4 sm:-mt-6 mb-6 sm:mb-8">Here's what's happening with your campaigns today.</p>
+      <p className="text-xs sm:text-sm text-zinc-400 -mt-4 sm:-mt-6 mb-6 sm:mb-8">{t('dashboard.subtitle')}</p>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
         {stats.map(s => (
@@ -54,18 +56,18 @@ const Dashboard: React.FC = () => {
         {/* Recent campaigns */}
         <div className="lg:col-span-2 bg-zinc-900/60 border border-zinc-800 rounded-xl overflow-hidden">
           <div className="flex items-center justify-between p-4 sm:p-5 border-b border-zinc-800">
-            <h2 className="font-semibold text-sm sm:text-base">Recent campaigns</h2>
-            <Link to="/campaigns" className="text-xs text-brand-400 hover:text-brand-300 whitespace-nowrap">View all →</Link>
+            <h2 className="font-semibold text-sm sm:text-base">{t('dashboard.recent.title')}</h2>
+            <Link to="/campaigns" className="text-xs text-brand-400 hover:text-brand-300 whitespace-nowrap">{t('common.viewAll')}</Link>
           </div>
           {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-xs text-zinc-500 uppercase tracking-wider">
                 <tr className="border-b border-zinc-800/50">
-                  <th className="text-left px-5 py-3 font-medium">Name</th>
-                  <th className="text-left px-5 py-3 font-medium">Duration</th>
-                  <th className="text-left px-5 py-3 font-medium">Status</th>
-                  <th className="text-left px-5 py-3 font-medium">Created</th>
+                  <th className="text-left px-5 py-3 font-medium">{t('dashboard.table.name')}</th>
+                  <th className="text-left px-5 py-3 font-medium">{t('dashboard.table.duration')}</th>
+                  <th className="text-left px-5 py-3 font-medium">{t('dashboard.table.status')}</th>
+                  <th className="text-left px-5 py-3 font-medium">{t('dashboard.table.created')}</th>
                   <th className="text-right px-5 py-3 font-medium" />
                 </tr>
               </thead>
@@ -107,14 +109,14 @@ const Dashboard: React.FC = () => {
         {/* Activity */}
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl">
           <div className="p-4 sm:p-5 border-b border-zinc-800">
-            <h2 className="font-semibold text-sm sm:text-base">Activity</h2>
+            <h2 className="font-semibold text-sm sm:text-base">{t('dashboard.activity.title')}</h2>
           </div>
           <ul className="p-4 sm:p-5 space-y-4 text-sm">
             {items.filter(i => i.status === 'done').slice(0, 3).map(i => (
               <li key={i.id} className="flex gap-3">
                 <div className="w-7 h-7 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center flex-shrink-0"><Icon name="check" size={14} strokeWidth={3} /></div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-zinc-200 truncate text-xs sm:text-sm">{i.name} — video ready</p>
+                  <p className="text-zinc-200 truncate text-xs sm:text-sm">{t('dashboard.activity.videoReady', { name: i.name })}</p>
                   <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">{timeAgo(i.created_at)}</p>
                 </div>
               </li>

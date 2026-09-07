@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useStore } from '../lib/store';
 import TopBar from '../components/TopBar';
 import { cn, timeAgo } from '../lib/utils';
 import { Icon, toast, openModal } from '../components/ui';
 
 const TABS = [
-  { id: 'frames',   label: 'Frames' },
-  { id: 'script',   label: 'Script' },
-  { id: 'source',   label: 'Source' },
-  { id: 'activity', label: 'Activity' },
+  { id: 'frames',   labelKey: 'detail.tabs.frames' },
+  { id: 'script',   labelKey: 'detail.tabs.script' },
+  { id: 'source',   labelKey: 'detail.tabs.source' },
+  { id: 'activity', labelKey: 'detail.tabs.activity' },
 ] as const;
 
 const Detail: React.FC = () => {
   const { id = '' } = useParams();
   const navigate = useNavigate();
   const { history, setHistory } = useStore();
+  const { t } = useTranslation();
   const c = history.find(i => i.id === id);
   const [tab, setTab] = useState<typeof TABS[number]['id']>('frames');
 
@@ -23,9 +25,9 @@ const Detail: React.FC = () => {
     return (
       <div className="p-8 sm:p-12 text-center">
         <Icon name="helpCircle" size={48} className="text-zinc-500 mb-4" strokeWidth={1.5} />
-        <h2 className="text-lg sm:text-xl font-semibold">Campaign not found</h2>
-        <p className="text-sm text-zinc-400 mt-2">The campaign may have been deleted.</p>
-        <button onClick={() => navigate('/campaigns')} className="btn btn-primary mt-6 text-sm">Back to campaigns</button>
+        <h2 className="text-lg sm:text-xl font-semibold">{t('detail.notFound.title')}</h2>
+        <p className="text-sm text-zinc-400 mt-2">{t('detail.notFound.desc')}</p>
+        <button onClick={() => navigate('/campaigns')} className="btn btn-primary mt-6 text-sm">{t('detail.notFound.cta')}</button>
       </div>
     );
   }
@@ -39,9 +41,9 @@ const Detail: React.FC = () => {
     <>
       <TopBar
         title={c.name}
-        breadcrumb={[{ label: 'Campaigns', href: '/campaigns' }, { label: c.name }]}
+        breadcrumb={[{ label: t('wizard.breadcrumb.campaigns'), href: '/campaigns' }, { label: c.name }]}
         actions={[
-          <button key="back" onClick={() => navigate('/campaigns')} className="btn btn-secondary text-xs sm:text-sm">← Back</button>,
+          <button key="back" onClick={() => navigate('/campaigns')} className="btn btn-secondary text-xs sm:text-sm">{t('detail.back')}</button>,
         ]}
       />
 
@@ -64,7 +66,7 @@ const Detail: React.FC = () => {
                 m.overlay.innerHTML = '';
                 m.overlay.appendChild(wrap);
               } else {
-                toast('Video not ready yet', 'info');
+                toast(t('detail.toast.videoNotReady'), 'info');
               }
             }}
             className="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-white/90 hover:bg-white flex items-center justify-center transition shadow-2xl"
@@ -82,18 +84,18 @@ const Detail: React.FC = () => {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => { navigator.clipboard?.writeText(c.videoUrl || ''); toast('Video URL copied', 'success'); }} className="btn bg-white/10 backdrop-blur hover:bg-white/20 text-white border border-white/10 text-xs px-2.5 py-1.5">Share</button>
-              <button onClick={() => toast('Export started', 'success')} className="btn bg-white/10 backdrop-blur hover:bg-white/20 text-white border border-white/10 text-xs px-2.5 py-1.5">Export</button>
+              <button onClick={() => { navigator.clipboard?.writeText(c.videoUrl || ''); toast(t('detail.toast.videoUrlCopied'), 'success'); }} className="btn bg-white/10 backdrop-blur hover:bg-white/20 text-white border border-white/10 text-xs px-2.5 py-1.5">{t('detail.share')}</button>
+              <button onClick={() => toast(t('detail.toast.exportStarted'), 'success')} className="btn bg-white/10 backdrop-blur hover:bg-white/20 text-white border border-white/10 text-xs px-2.5 py-1.5">{t('detail.export')}</button>
               <button
                 onClick={() => {
-                  if (confirm('Delete this campaign?')) {
+                  if (confirm(t('detail.confirmDelete'))) {
                     setHistory(curr => curr.filter(i => i.id !== c.id));
-                    toast('Campaign deleted', 'success');
+                    toast(t('detail.toast.campaignDeleted'), 'success');
                     navigate('/campaigns');
                   }
                 }}
                 className="btn btn-danger text-xs px-2.5 py-1.5"
-              >Delete</button>
+              >{t('detail.delete')}</button>
             </div>
           </div>
         </div>
@@ -102,11 +104,11 @@ const Detail: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         <div className="lg:col-span-2 min-w-0">
           <nav className="flex gap-4 sm:gap-6 text-sm border-b border-zinc-800 overflow-x-auto scrollbar-thin whitespace-nowrap">
-            {TABS.map(t => {
-              const active = tab === t.id;
+            {TABS.map(item => {
+              const active = tab === item.id;
               return (
-                <button key={t.id} onClick={() => setTab(t.id)} className={cn('py-3 border-b-2 -mb-px', active ? 'border-brand-500 text-brand-300 font-medium' : 'border-transparent text-zinc-400 hover:text-white')}>
-                  {t.label}
+                <button key={item.id} onClick={() => setTab(item.id)} className={cn('py-3 border-b-2 -mb-px', active ? 'border-brand-500 text-brand-300 font-medium' : 'border-transparent text-zinc-400 hover:text-white')}>
+                  {t(item.labelKey)}
                 </button>
               );
             })}
@@ -115,14 +117,14 @@ const Detail: React.FC = () => {
             {tab === 'frames' && (
               <>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
-                  <h3 className="text-xs sm:text-sm font-semibold">Timeline · {nFrames} frames</h3>
+                  <h3 className="text-xs sm:text-sm font-semibold">{t('detail.timeline', { count: nFrames })}</h3>
                   <div className="text-[10px] sm:text-xs text-zinc-500">0:00 → 0:{String(c.duration_s).padStart(2,'0')}</div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
                   {frames.map((f, i) => (
                     <div key={i} className="frame-card aspect-video rounded-lg overflow-hidden border border-zinc-800 relative cursor-pointer hover:border-brand-500/50">
                       {f.url
-                        ? <img src={f.url} className="w-full h-full object-cover" alt={`Frame ${i}`} loading="lazy" />
+                        ? <img src={f.url} className="w-full h-full object-cover" alt={t('detail.frameAlt', { index: i })} loading="lazy" />
                         : <div className={cn('w-full h-full bg-gradient-to-br', c.color, 'opacity-80')} />
                       }
                       <span className="absolute bottom-1 left-1 text-[9px] sm:text-[10px] bg-black/70 px-1.5 py-0.5 rounded">
@@ -138,19 +140,19 @@ const Detail: React.FC = () => {
             )}
             {tab === 'script' && (
               <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-6">
-                <h3 className="font-semibold text-sm sm:text-base mb-3">Voice-over script</h3>
+                <h3 className="font-semibold text-sm sm:text-base mb-3">{t('detail.script.title')}</h3>
                 <pre className="whitespace-pre-wrap font-mono text-xs sm:text-sm text-zinc-300 leading-relaxed">
-                  {c.script || (c.plan ? `${c.plan.hook}\n\n${c.plan.tagline}\n\nCall to action: ${c.plan.cta}` : 'No script generated yet.')}
+                  {c.script || (c.plan ? `${c.plan.hook}\n\n${c.plan.tagline}\n\n${t('detail.script.callToAction')} ${c.plan.cta}` : t('detail.script.empty'))}
                 </pre>
               </div>
             )}
             {tab === 'source' && (
               <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl divide-y divide-zinc-800/60">
                 {[
-                  ['Type',     c.source_kind || 'url'],
-                  ['Target',   c.source || '—'],
-                  ['Style',    c.style || 'cinematic'],
-                  ['Created',  timeAgo(c.created_at)],
+                  [t('detail.source.type'),    c.source_kind || 'url'],
+                  [t('detail.source.target'),  c.source || '—'],
+                  [t('detail.source.style'),   c.style || 'cinematic'],
+                  [t('detail.source.created'), timeAgo(c.created_at)],
                 ].map(([k, v]) => (
                   <div key={k} className="flex items-center justify-between p-3 sm:p-4 text-xs sm:text-sm gap-3">
                     <span className="text-zinc-500 flex-shrink-0">{k}</span>
@@ -164,7 +166,7 @@ const Detail: React.FC = () => {
                 <li className="flex gap-3 p-3 bg-zinc-900/40 rounded-lg border border-zinc-800">
                   <div className="w-7 h-7 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center flex-shrink-0"><Icon name="check" size={14} strokeWidth={3} /></div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-zinc-200 truncate">Pipeline complete</p>
+                    <p className="text-zinc-200 truncate">{t('detail.activity.pipelineComplete')}</p>
                     <p className="text-[10px] sm:text-xs text-zinc-500 mt-0.5">{timeAgo(c.created_at)}</p>
                   </div>
                 </li>
@@ -176,23 +178,23 @@ const Detail: React.FC = () => {
         <div className="lg:col-span-1 space-y-4 sm:space-y-6">
           {c.plan && (
             <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-5">
-              <h3 className="font-semibold text-sm sm:text-base mb-3 sm:mb-4">Campaign plan</h3>
+              <h3 className="font-semibold text-sm sm:text-base mb-3 sm:mb-4">{t('detail.plan.title')}</h3>
               <div className="space-y-3 text-xs sm:text-sm">
-                {planRow('Hook', c.plan.hook)}
-                {planRow('Tagline', c.plan.tagline)}
-                {planRow('CTA', c.plan.cta)}
-                {planRow('Audience', c.plan.audience)}
-                {planRow('Tone', c.plan.tone)}
+                {planRow(t('detail.plan.hook'), c.plan.hook)}
+                {planRow(t('detail.plan.tagline'), c.plan.tagline)}
+                {planRow(t('detail.plan.cta'), c.plan.cta)}
+                {planRow(t('detail.plan.audience'), c.plan.audience)}
+                {planRow(t('detail.plan.tone'), c.plan.tone)}
               </div>
             </div>
           )}
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-5">
-            <h3 className="font-semibold text-sm sm:text-base mb-3 sm:mb-4">Metadata</h3>
+            <h3 className="font-semibold text-sm sm:text-base mb-3 sm:mb-4">{t('detail.metadata.title')}</h3>
             <div className="space-y-2 text-xs sm:text-sm">
-              {metaRow('ID', c.id)}
-              {metaRow('Duration', c.duration_s + 's')}
-              {metaRow('Status', c.status)}
-              {metaRow('Created', timeAgo(c.created_at))}
+              {metaRow(t('detail.metadata.id'), c.id)}
+              {metaRow(t('detail.metadata.duration'), c.duration_s + 's')}
+              {metaRow(t('detail.metadata.status'), c.status)}
+              {metaRow(t('detail.metadata.created'), timeAgo(c.created_at))}
             </div>
           </div>
         </div>

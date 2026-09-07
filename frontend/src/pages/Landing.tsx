@@ -1,16 +1,27 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Icon, Logo, type IconName } from '../components/ui';
+import LanguageSwitcher from '../components/LanguageSwitcher';
 
-const FEATURES: { icon: IconName; title: string; desc: string }[] = [
-  { icon: 'globe', title: 'Website scrape', desc: 'Paste a URL — agent-browser handles JS, llms.txt, and login-gated sites.' },
-  { icon: 'sparkles', title: 'AI plan', desc: 'MiniMax-M3 plans hook, tagline, CTA, audience & tone.' },
-  { icon: 'image', title: 'Frame generation', desc: 'Up to 23 HD frames via GPT-Image-2.0.' },
-  { icon: 'video', title: 'Video assembly', desc: 'MiniMax-H3 stitches frames + master prompt.' },
+const FEATURES: { icon: IconName; titleKey: string; descKey: string }[] = [
+  { icon: 'globe',    titleKey: 'landing.features.scrape.title', descKey: 'landing.features.scrape.desc' },
+  { icon: 'sparkles', titleKey: 'landing.features.plan.title',   descKey: 'landing.features.plan.desc' },
+  { icon: 'image',    titleKey: 'landing.features.frames.title', descKey: 'landing.features.frames.desc' },
+  { icon: 'video',    titleKey: 'landing.features.video.title',  descKey: 'landing.features.video.desc' },
+];
+
+const NAV_LINKS: { path: string; key: string }[] = [
+  { path: '/dashboard',    key: 'landing.nav.dashboard' },
+  { path: '/campaigns',    key: 'landing.nav.campaigns' },
+  { path: '/library',      key: 'landing.nav.library' },
+  { path: '/integrations', key: 'landing.nav.integrations' },
+  { path: '/pricing',      key: 'landing.nav.pricing' },
 ];
 
 const Landing: React.FC = () => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = React.useState(false);
 
   return (
@@ -22,24 +33,23 @@ const Landing: React.FC = () => {
             <Logo />
           </Link>
           <nav className="hidden md:flex gap-6 text-sm text-zinc-400">
-            <Link to="/dashboard" className="hover:text-white">Dashboard</Link>
-            <Link to="/campaigns" className="hover:text-white">Campaigns</Link>
-            <Link to="/library" className="hover:text-white">Library</Link>
-            <Link to="/integrations" className="hover:text-white">Integrations</Link>
-            <Link to="/pricing" className="hover:text-white">Pricing</Link>
+            {NAV_LINKS.map(l => (
+              <Link key={l.path} to={l.path} className="hover:text-white">{t(l.key)}</Link>
+            ))}
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link to="/dashboard" className="hidden sm:inline text-sm text-zinc-400 hover:text-white">Sign in</Link>
+            <LanguageSwitcher />
+            <Link to="/dashboard" className="hidden sm:inline text-sm text-zinc-400 hover:text-white">{t('landing.nav.signIn')}</Link>
             <button
               onClick={() => navigate('/new')}
               className="btn btn-primary text-xs sm:text-sm px-3 py-1.5"
             >
-              Start free
+              {t('landing.nav.startFree')}
             </button>
             <button
               onClick={() => setMenuOpen(o => !o)}
               className="md:hidden w-9 h-9 -mr-1 rounded-lg flex items-center justify-center text-zinc-300 hover:text-white hover:bg-zinc-900"
-              aria-label="Menu"
+              aria-label={t('landing.nav.menu')}
             >
               <Icon name={menuOpen ? "close" : "menu"} size={20} strokeWidth={2} />
             </button>
@@ -47,20 +57,14 @@ const Landing: React.FC = () => {
         </div>
         {menuOpen && (
           <div className="md:hidden absolute inset-x-0 top-14 mx-3 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl z-40 p-2 animate-slide-up">
-            {[
-              { path: '/dashboard', label: 'Dashboard' },
-              { path: '/campaigns', label: 'Campaigns' },
-              { path: '/library', label: 'Library' },
-              { path: '/integrations', label: 'Integrations' },
-              { path: '/pricing', label: 'Pricing' },
-            ].map(item => (
+            {NAV_LINKS.map(item => (
               <Link
                 key={item.path}
                 to={item.path}
                 onClick={() => setMenuOpen(false)}
                 className="block px-4 py-2.5 rounded-lg text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white"
               >
-                {item.label}
+                {t(item.key)}
               </Link>
             ))}
           </div>
@@ -71,15 +75,15 @@ const Landing: React.FC = () => {
         <div className="text-center mb-8 sm:mb-12">
           <div className="inline-flex items-center gap-2 text-[10px] sm:text-xs text-brand-300 bg-brand-500/10 border border-brand-500/20 px-2.5 sm:px-3 py-1 rounded-full mb-4 sm:mb-5">
             <span className="w-1.5 h-1.5 rounded-full bg-brand-400 animate-pulse flex-shrink-0" />
-            <span>MiniMax-H3 + GPT-Image-2.0</span>
+            <span>{t('landing.badge')}</span>
           </div>
           <h1 className="text-3xl sm:text-5xl md:text-6xl font-bold tracking-tight font-display">
-            Ship <span className="gradient-text">marketing videos</span>
+            {t('landing.hero.titleLead')} <span className="gradient-text">{t('landing.hero.titleHighlight')}</span>
             <br />
-            in minutes, not weeks.
+            {t('landing.hero.titleTail')}
           </h1>
           <p className="text-zinc-400 mt-4 sm:mt-5 max-w-2xl mx-auto text-sm sm:text-lg px-2">
-            Paste a URL or a project folder. We scrape, plan, render, and assemble a full campaign — script, frames, video — all in one orchestrated AI pipeline.
+            {t('landing.hero.subtitle')}
           </p>
         </div>
 
@@ -88,11 +92,11 @@ const Landing: React.FC = () => {
             onClick={() => navigate('/new')}
             className="btn btn-primary px-5 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base w-full sm:w-auto"
           >
-            Start generating
+            {t('landing.cta.start')}
             <Icon name="arrowRight" size={14} strokeWidth={2} className="sm:w-4 sm:h-4" />
           </button>
           <Link to="/pricing" className="btn btn-ghost px-4 sm:px-5 py-2.5 sm:py-3 text-sm sm:text-base w-full sm:w-auto">
-            See pricing
+            {t('landing.cta.pricing')}
           </Link>
         </div>
 
@@ -102,15 +106,15 @@ const Landing: React.FC = () => {
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-brand-500/10 text-brand-300 flex items-center justify-center mb-2 sm:mb-3">
                 <Icon name={f.icon} size={16} strokeWidth={1.8} className="sm:w-[18px] sm:h-[18px]" />
               </div>
-              <p className="text-sm font-medium">{f.title}</p>
-              <p className="text-[11px] sm:text-xs text-zinc-500 mt-1">{f.desc}</p>
+              <p className="text-sm font-medium">{t(f.titleKey)}</p>
+              <p className="text-[11px] sm:text-xs text-zinc-500 mt-1">{t(f.descKey)}</p>
             </div>
           ))}
         </div>
       </main>
 
       <footer className="border-t border-zinc-800/80 mt-12 sm:mt-16 py-6 sm:py-8 text-center text-[10px] sm:text-xs text-zinc-500">
-        © 2025 MarketingForge · <Link to="/pricing" className="hover:text-zinc-300">Pricing</Link> · <Link to="/integrations" className="hover:text-zinc-300">Integrations</Link> · <a href="/api/health" target="_blank" className="hover:text-zinc-300">API health</a>
+        {t('landing.footer.copyright')} · <Link to="/pricing" className="hover:text-zinc-300">{t('landing.footer.pricing')}</Link> · <Link to="/integrations" className="hover:text-zinc-300">{t('landing.footer.integrations')}</Link> · <a href="/api/health" target="_blank" className="hover:text-zinc-300">{t('landing.footer.apiHealth')}</a>
       </footer>
     </div>
   );

@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import TopBar from '../components/TopBar';
 import { useStore } from '../lib/store';
 import { toast } from '../components/ui';
 import { cn } from '../lib/utils';
 
 const TABS = [
-  { id: 'profile',  label: 'Profile' },
-  { id: 'security', label: 'Security' },
-  { id: 'billing',  label: 'Billing' },
-  { id: 'team',     label: 'Team' },
-  { id: 'api',      label: 'API keys' },
+  { id: 'profile',  labelKey: 'settings.tabs.profile' },
+  { id: 'security', labelKey: 'settings.tabs.security' },
+  { id: 'billing',  labelKey: 'settings.tabs.billing' },
+  { id: 'team',     labelKey: 'settings.tabs.team' },
+  { id: 'api',      labelKey: 'settings.tabs.api' },
 ] as const;
 
 const Settings: React.FC = () => {
   const { user, setUser } = useStore();
+  const { t } = useTranslation();
   const local = { ...user };
   const [tab, setTab] = useState<typeof TABS[number]['id']>('profile');
 
@@ -27,16 +29,16 @@ const Settings: React.FC = () => {
 
   return (
     <>
-      <TopBar title="Settings" />
-      <p className="text-xs sm:text-sm text-zinc-400 -mt-4 sm:-mt-6 mb-4 sm:mb-6">Manage your profile, security, billing, and API.</p>
+      <TopBar title={t('settings.title')} />
+      <p className="text-xs sm:text-sm text-zinc-400 -mt-4 sm:-mt-6 mb-4 sm:mb-6">{t('settings.subtitle')}</p>
 
       <div className="border-b border-zinc-800 mb-4 sm:mb-6 -mx-3 px-3 sm:mx-0 sm:px-0 overflow-x-auto scrollbar-thin">
         <nav className="flex gap-4 sm:gap-6 text-sm whitespace-nowrap">
-          {TABS.map(t => {
-            const active = tab === t.id;
+          {TABS.map(item => {
+            const active = tab === item.id;
             return (
-              <button key={t.id} onClick={() => setTab(t.id)} className={cn('py-3 border-b-2 -mb-px', active ? 'border-brand-500 text-brand-300 font-medium' : 'border-transparent text-zinc-400 hover:text-white')}>
-                {t.label}
+              <button key={item.id} onClick={() => setTab(item.id)} className={cn('py-3 border-b-2 -mb-px', active ? 'border-brand-500 text-brand-300 font-medium' : 'border-transparent text-zinc-400 hover:text-white')}>
+                {t(item.labelKey)}
               </button>
             );
           })}
@@ -51,29 +53,29 @@ const Settings: React.FC = () => {
               <p className="text-base sm:text-lg font-semibold truncate">{local.name}</p>
               <p className="text-xs sm:text-sm text-zinc-400 truncate">{local.email}</p>
             </div>
-            <button onClick={() => toast('Avatar upload (demo)', 'info')} className="btn btn-secondary text-xs sm:text-sm">Change</button>
+            <button onClick={() => toast(t('settings.toast.avatarUpload'), 'info')} className="btn btn-secondary text-xs sm:text-sm">{t('settings.profile.change')}</button>
           </div>
-          {field('Display name', local.name, v => { local.name = v; })}
-          {field('Email', local.email, v => { local.email = v; })}
+          {field(t('settings.profile.displayName'), local.name, v => { local.name = v; })}
+          {field(t('settings.profile.email'), local.email, v => { local.email = v; })}
           <div className="flex justify-end mt-6">
-            <button onClick={() => { setUser(local); toast('Profile saved', 'success'); }} className="btn btn-primary text-xs sm:text-sm w-full sm:w-auto">Save changes</button>
+            <button onClick={() => { setUser(local); toast(t('settings.toast.profileSaved'), 'success'); }} className="btn btn-primary text-xs sm:text-sm w-full sm:w-auto">{t('settings.profile.save')}</button>
           </div>
         </div>
       )}
 
       {tab === 'security' && (
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-6">
-          <h3 className="font-semibold text-sm sm:text-base mb-4">Password</h3>
-          {field('Current password', '', () => {}, 'password')}
-          {field('New password', '', () => {}, 'password')}
-          {field('Confirm new password', '', () => {}, 'password')}
+          <h3 className="font-semibold text-sm sm:text-base mb-4">{t('settings.security.password')}</h3>
+          {field(t('settings.security.currentPassword'), '', () => {}, 'password')}
+          {field(t('settings.security.newPassword'), '', () => {}, 'password')}
+          {field(t('settings.security.confirmPassword'), '', () => {}, 'password')}
           <div className="flex justify-end mt-6">
-            <button onClick={() => toast('Password updated (demo)', 'success')} className="btn btn-primary text-xs sm:text-sm w-full sm:w-auto">Update password</button>
+            <button onClick={() => toast(t('settings.toast.passwordUpdated'), 'success')} className="btn btn-primary text-xs sm:text-sm w-full sm:w-auto">{t('settings.security.updatePassword')}</button>
           </div>
           <hr className="border-zinc-800 my-6" />
-          <h3 className="font-semibold text-sm sm:text-base mb-2">Two-factor authentication</h3>
-          <p className="text-xs sm:text-sm text-zinc-400 mb-3">Add an extra layer of security to your account.</p>
-          <button onClick={() => toast('2FA setup (demo)', 'info')} className="btn btn-secondary text-xs sm:text-sm">Enable 2FA</button>
+          <h3 className="font-semibold text-sm sm:text-base mb-2">{t('settings.security.twoFactor')}</h3>
+          <p className="text-xs sm:text-sm text-zinc-400 mb-3">{t('settings.security.twoFactorDesc')}</p>
+          <button onClick={() => toast(t('settings.toast.twoFactorSetup'), 'info')} className="btn btn-secondary text-xs sm:text-sm">{t('settings.security.enable2fa')}</button>
         </div>
       )}
 
@@ -81,36 +83,36 @@ const Settings: React.FC = () => {
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div>
-              <h3 className="font-semibold text-sm sm:text-base">Current plan</h3>
-              <p className="text-xs sm:text-sm text-zinc-400 mt-1">Free plan · {local.usage} of {local.limit} campaigns used this month.</p>
+              <h3 className="font-semibold text-sm sm:text-base">{t('settings.billing.currentPlan')}</h3>
+              <p className="text-xs sm:text-sm text-zinc-400 mt-1">{t('settings.billing.usage', { usage: local.usage, limit: local.limit })}</p>
             </div>
-            <Link to="/pricing" className="btn btn-primary text-xs sm:text-sm">Upgrade</Link>
+            <Link to="/pricing" className="btn btn-primary text-xs sm:text-sm">{t('settings.billing.upgrade')}</Link>
           </div>
           <div className="h-2 bg-zinc-800 rounded-full overflow-hidden mb-4 sm:mb-6">
             <div className="h-full gradient-bg" style={{ width: `${(local.usage/local.limit)*100}%` }} />
           </div>
-          <h3 className="font-semibold text-sm sm:text-base mb-3">Payment method</h3>
+          <h3 className="font-semibold text-sm sm:text-base mb-3">{t('settings.billing.paymentMethod')}</h3>
           <div className="bg-zinc-950 border border-zinc-800 rounded-lg p-3 sm:p-4 flex items-center gap-3">
             <div className="w-10 h-7 bg-gradient-to-br from-zinc-700 to-zinc-900 rounded flex-shrink-0" />
-            <div className="flex-1"><p className="text-xs sm:text-sm">No card on file</p></div>
-            <button onClick={() => toast('Add card flow (demo)', 'info')} className="btn btn-secondary text-xs sm:text-sm">Add card</button>
+            <div className="flex-1"><p className="text-xs sm:text-sm">{t('settings.billing.noCard')}</p></div>
+            <button onClick={() => toast(t('settings.toast.addCard'), 'info')} className="btn btn-secondary text-xs sm:text-sm">{t('settings.billing.addCard')}</button>
           </div>
         </div>
       )}
 
       {tab === 'team' && (
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-6">
-          <h3 className="font-semibold text-sm sm:text-base mb-1">Team members</h3>
-          <p className="text-xs sm:text-sm text-zinc-400 mb-4">Upgrade to invite collaborators.</p>
-          <button onClick={() => toast('Invite flow (demo)', 'info')} className="btn btn-primary text-xs sm:text-sm">Invite teammate</button>
+          <h3 className="font-semibold text-sm sm:text-base mb-1">{t('settings.team.title')}</h3>
+          <p className="text-xs sm:text-sm text-zinc-400 mb-4">{t('settings.team.desc')}</p>
+          <button onClick={() => toast(t('settings.toast.inviteFlow'), 'info')} className="btn btn-primary text-xs sm:text-sm">{t('settings.team.invite')}</button>
         </div>
       )}
 
       {tab === 'api' && (
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-            <h3 className="font-semibold text-sm sm:text-base">API keys</h3>
-            <button onClick={() => toast('New key created (demo)', 'success')} className="btn btn-primary text-xs sm:text-sm">Generate key</button>
+            <h3 className="font-semibold text-sm sm:text-base">{t('settings.api.title')}</h3>
+            <button onClick={() => toast(t('settings.toast.keyCreated'), 'success')} className="btn btn-primary text-xs sm:text-sm">{t('settings.api.generate')}</button>
           </div>
           <div className="space-y-2">
             {[
@@ -123,8 +125,8 @@ const Settings: React.FC = () => {
                   <p className="text-[10px] sm:text-xs text-zinc-500 font-mono truncate">{k.prefix}a3f9</p>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
-                  <button onClick={() => toast('Copied to clipboard', 'success')} className="btn btn-ghost text-xs px-2.5 py-1.5">Copy</button>
-                  <button onClick={() => toast('Revoked (demo)', 'info')} className="btn btn-danger text-xs px-2.5 py-1.5">Revoke</button>
+                  <button onClick={() => toast(t('settings.toast.copied'), 'success')} className="btn btn-ghost text-xs px-2.5 py-1.5">{t('settings.api.copy')}</button>
+                  <button onClick={() => toast(t('settings.toast.revoked'), 'info')} className="btn btn-danger text-xs px-2.5 py-1.5">{t('settings.api.revoke')}</button>
                 </div>
               </div>
             ))}

@@ -12,26 +12,28 @@
 
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Icon, type IconName } from './ui';
 import { cn } from '../lib/utils';
 
-const NAV: { path: string; label: string; icon: IconName; }[] = [
-  { path: '/',              label: 'Home',      icon: 'home' },
-  { path: '/campaigns',     label: 'Campaigns', icon: 'campaigns' },
-  { path: '/new',           label: 'New',       icon: 'plus' },  // Special: FAB style
-  { path: '/library',       label: 'Library',   icon: 'library' },
-  { path: '/dashboard',     label: 'More',      icon: 'menu' },
+const NAV: { path: string; labelKey: string; icon: IconName; }[] = [
+  { path: '/',              labelKey: 'nav.home',      icon: 'home' },
+  { path: '/campaigns',     labelKey: 'nav.campaigns', icon: 'campaigns' },
+  { path: '/new',           labelKey: 'nav.new',       icon: 'plus' },  // Special: FAB style
+  { path: '/library',       labelKey: 'nav.library',   icon: 'library' },
+  { path: '/dashboard',     labelKey: 'nav.more',      icon: 'menu' },
 ];
 
 const MoreDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   if (!open) return null;
 
-  const items: { path: string; label: string; desc: string; icon: IconName }[] = [
-    { path: '/integrations', label: 'Integrations', desc: 'Connect AI providers', icon: 'integrations' },
-    { path: '/analytics',    label: 'Analytics',     desc: 'Performance & usage',  icon: 'analytics' },
-    { path: '/settings',     label: 'Settings',      desc: 'Profile & API keys',   icon: 'settings' },
-    { path: '/pricing',      label: 'Pricing',       desc: 'Plans & upgrade',     icon: 'creditCard' },
+  const items: { path: string; labelKey: string; descKey: string; icon: IconName }[] = [
+    { path: '/integrations', labelKey: 'nav.integrations', descKey: 'nav.more.integrations.desc', icon: 'integrations' },
+    { path: '/analytics',    labelKey: 'nav.analytics',    descKey: 'nav.more.analytics.desc',    icon: 'analytics' },
+    { path: '/settings',     labelKey: 'nav.settings',     descKey: 'nav.more.settings.desc',     icon: 'settings' },
+    { path: '/pricing',      labelKey: 'nav.pricing',      descKey: 'nav.more.pricing.desc',      icon: 'creditCard' },
   ];
 
   return (
@@ -44,7 +46,7 @@ const MoreDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
         <div className="p-4 pb-6">
           {/* Handle */}
           <div className="w-12 h-1.5 bg-zinc-700 rounded-full mx-auto mb-4" />
-          <h3 className="text-sm font-semibold text-zinc-400 mb-3 px-2">More</h3>
+          <h3 className="text-sm font-semibold text-zinc-400 mb-3 px-2">{t('nav.more')}</h3>
           <div className="grid grid-cols-2 gap-2">
             {items.map(item => (
               <button
@@ -56,8 +58,8 @@ const MoreDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
                   <Icon name={item.icon} size={18} />
                 </span>
                 <span className="min-w-0">
-                  <p className="text-sm font-medium text-zinc-100">{item.label}</p>
-                  <p className="text-xs text-zinc-500 mt-0.5">{item.desc}</p>
+                  <p className="text-sm font-medium text-zinc-100">{t(item.labelKey)}</p>
+                  <p className="text-xs text-zinc-500 mt-0.5">{t(item.descKey)}</p>
                 </span>
               </button>
             ))}
@@ -71,6 +73,7 @@ const MoreDrawer: React.FC<{ open: boolean; onClose: () => void }> = ({ open, on
 const BottomNav: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [moreOpen, setMoreOpen] = React.useState(false);
 
   const isActive = (path: string) =>
@@ -141,7 +144,7 @@ const BottomNav: React.FC = () => {
           contain: 'layout style',
           paddingTop: '4px',
         } as React.CSSProperties}
-        aria-label="Primary"
+        aria-label={t('nav.primary')}
       >
         {NAV.map(item => {
           const active = isActive(item.path);
@@ -153,12 +156,12 @@ const BottomNav: React.FC = () => {
                 key={item.path}
                 onClick={() => { navigate(item.path); }}
                 className="flex-1 flex flex-col items-center justify-center -mt-5 group"
-                aria-label="New campaign"
+                aria-label={t('nav.newCampaign')}
               >
                 <span className="w-11 h-11 rounded-full gradient-bg flex items-center justify-center shadow-lg shadow-brand-950/50 group-active:scale-95 transition-transform">
                   <Icon name="plus" size={22} strokeWidth={2.5} className="text-white" />
                 </span>
-                <span className="text-[10px] text-zinc-400 mt-0.5">New</span>
+                <span className="text-[10px] text-zinc-400 mt-0.5">{t('nav.new')}</span>
               </button>
             );
           }
@@ -174,11 +177,11 @@ const BottomNav: React.FC = () => {
                 }
               }}
               className={`flex-1 flex flex-col items-center justify-center gap-0.5 ${active ? 'text-brand-300' : 'text-zinc-500'}`}
-              aria-label={item.label}
+              aria-label={t(item.labelKey)}
               aria-current={active ? 'page' : undefined}
             >
               <Icon name={item.icon} size={22} />
-              <span className="text-[10px]">{item.label}</span>
+              <span className="text-[10px]">{t(item.labelKey)}</span>
             </button>
           );
         })}
