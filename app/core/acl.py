@@ -277,7 +277,23 @@ def get_current_principal(
         principal = _parse_demo_token(creds.credentials)
         if principal is not None:
             return principal
-        # Real-world: verify a JWT here. For now treat as guest.
+        # Real JWT path — verified here. We import lazily so test suites
+        # without a configured vault_key still work.
+        try:
+            from app.core.security import jwt_decode
+            from app.services import storage
+            payload = jwt_decode(creds.credentials)
+        except Exception:
+            payload = None
+        if payload is not None:
+            user_id = payload.get("sub")
+            user = storage.get_user_by_id(user_id) if user_id else None
+            if user is not None:
+                return Principal(
+                    id=user["id"], email=user["email"],
+                    name=user.get("name") or "",
+                    roles=Role(int(user["roles"])),
+                )
     return Principal(id="guest", email="", roles=Role.GUEST)
 
 
