@@ -20,10 +20,20 @@ from app.core.acl import (
 from app.core.container import orchestrator
 from app.models.schemas import CampaignRequest
 from app.services.orchestrator import CampaignRequest as Req
+from app.api.billing import (
+    router as billing_router,
+    campaigns_router as billing_campaigns_router,
+)
 
 
 router = APIRouter()
 STATIC = pathlib.Path(__file__).parent.parent.parent / "static"
+
+# Billing lives in its own module but is mounted here so app/main.py (shipped
+# in PR #3) doesn't need to change. Final paths: /api/billing/* and
+# /api/campaigns/estimate.
+router.include_router(billing_router)
+router.include_router(billing_campaigns_router)
 
 
 # \u2500\u2500\u2500 Public \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -62,6 +72,7 @@ def _build_req(req: CampaignRequest) -> Req:
         username=req.username,
         password=req.password,
         allow_screenshots=req.allow_screenshots,
+        workspace_id=req.workspace_id,
     )
 
 

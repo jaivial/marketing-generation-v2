@@ -37,6 +37,13 @@ from typing import Any, AsyncIterator, Callable
 from app.core.config import settings
 from app.core.protocols import ChatClient, MediaClient, SourceReader
 from app.services import wavespeed_client as _ws
+from app.services.credits import (
+    InsufficientCreditsError,
+    estimate_campaign_cost,
+    price_for_user,
+    refund_reservation,
+    require_credits,
+)
 from app.services.wavespeed_client import SceneClip, ScenePlan, WavespeedCLI
 
 
@@ -73,10 +80,18 @@ class CampaignRequest:
     # source URL via agent-browser and feed them to the video model. Default
     # is True because the AI decides for each campaign.
     allow_screenshots: bool = True
+    # Billing context. When ``workspace_id`` is None the run is not charged
+    # (used by the offline smoke tests and by ad-hoc CLI runs).
+    workspace_id: str | None = None
+    campaign_id: str | None = None
 
 
 class Orchestrator:
     """Single-purpose class: orchestrate a campaign. Depends on abstractions only."""
+
+    # The pipeline makes exactly four LLM round-trips: campaign plan, scene
+    # decision, frame prompts and the chunked VO script. Used for the estimate.
+    N_LLM_CALLS = 4
 
     def __init__(
         self,
@@ -108,6 +123,15 @@ class Orchestrator:
     def _n_frames(duration_s: int) -> int:
         # Hard cap at 9 frames regardless of duration.
         return max(2, min(MAX_FRAMES, math.ceil(duration_s / 2)))
+
+    @classmethod
+    def _n_video_clips(cls, duration_s: int) -> int:
+        """Number of wavespeed video calls a duration needs (one per clip).
+
+        Billing view of :meth:`_chunk_plan`: both must agree or the up-front
+        reservation would not match what the pipeline actually spends.
+        """
+        return cls._chunk_plan(duration_s)[0]
 
     @staticmethod
     def _chunk_plan(duration_s: int) -> tuple[int, int]:
@@ -151,9 +175,50 @@ class Orchestrator:
 
     # ---------- main pipeline --------------------------------------------------
     async def run(self, req: CampaignRequest) -> AsyncIterator[dict]:
+        # ---- budget: reserve credits before touching any paid provider ----
+        n_frames = self._n_frames(req.duration_s)
+        n_video_clips = self._n_video_clips(req.duration_s)
+        budget_usd = estimate_campaign_cost(
+            n_frames=n_frames,
+            n_video_clips=n_video_clips,
+            n_llm_calls=self.N_LLM_CALLS,
+        )
+        reserved_credits = 0.0
+        # Consumption counters, read by the settle/refund paths below.
+        frames_done = 0
+        clips_done = 0
+        llm_calls_done = 0
+
+        if req.workspace_id:
+            try:
+                balance = require_credits(
+                    req.workspace_id, budget_usd, campaign_id=req.campaign_id,
+                )
+            except InsufficientCreditsError as exc:
+                yield {
+                    "event": "error",
+                    "data": {
+                        "message": str(exc),
+                        "code": "insufficient_credits",
+                        "required_credits": price_for_user(budget_usd),
+                        "balance": exc.balance,
+                    },
+                }
+                return
+            reserved_credits = price_for_user(budget_usd)
+            yield {
+                "event": "budget",
+                "data": {
+                    "base_cost_usd": budget_usd,
+                    "reserved_credits": reserved_credits,
+                    "balance": balance,
+                    "n_frames": n_frames,
+                    "n_video_clips": n_video_clips,
+                },
+            }
+
         try:
             ctx = await self._ctx(req)
-            n_frames = self._n_frames(req.duration_s)
 
             # 1. Campaign plan
             plan_raw = await self._chat.complete(
@@ -165,15 +230,17 @@ class Orchestrator:
                     f"Style: {req.style}. Duration: {req.duration_s}s."
                 ),
             )
+            llm_calls_done += 1
             plan = self._extract_json(plan_raw)
             yield {"event": "plan", "data": plan}
 
             # 2. AI decide scenes & screenshots. The model is told the hard
-            #    limits (max 3 scenes, 30s/clip) and asked to either split
+            #    limits (max 3 scenes, per-call duration cap) and asked to either split
             #    into multiple logical scenes OR keep it as a single coherent
             #    ad. It also decides whether to embed screenshots of the web
             #    app (when the source is a URL).
             scene_decision = await self._plan_scenes(req, ctx, plan)
+            llm_calls_done += 1
             include_screenshots = bool(
                 scene_decision.get("include_screenshots")
                 and req.allow_screenshots
@@ -222,12 +289,14 @@ class Orchestrator:
                     f"Return JSON: {{\"frames\":[{{\"t\":<sec>,\"prompt\":<str>}}...]}}"
                 ),
             )
+            llm_calls_done += 1
             frames_plan = self._extract_json(frames_raw).get("frames", [])[:n_frames]
 
             # 5. Render each frame (text\u2192image)
             frame_urls: list[str] = []
             for i, fp in enumerate(frames_plan):
                 url = await self._media.generate_image(fp["prompt"])
+                frames_done += 1
                 frame_urls.append(url)
                 yield {"event": "frame", "data": {"i": i, "t": fp.get("t"), "url": url}}
 
@@ -238,6 +307,7 @@ class Orchestrator:
             segments = await self._chunked_script(
                 req, plan, frames_plan, n_chunks, per_chunk_s,
             )
+            llm_calls_done += 1
             script = self._script_text(segments)
             yield {
                 "event": "script",
@@ -268,6 +338,7 @@ class Orchestrator:
                 chunk_urls.append(
                     await self._wavespeed.generate_video(prompt, refs, per_chunk_s)
                 )
+                clips_done += 1
 
             video_url, stitched = await self._stitch(chunk_urls)
             yield {
@@ -285,6 +356,27 @@ class Orchestrator:
                 },
             }
 
+            # ---- settle the bill: charge only what we actually consumed ----
+            consumed_usd = estimate_campaign_cost(
+                n_frames=frames_done,
+                n_video_clips=clips_done,
+                n_llm_calls=llm_calls_done,
+            )
+            consumed_credits = price_for_user(consumed_usd)
+            if reserved_credits > 0:
+                # Never charge more than we reserved up front.
+                consumed_credits = min(consumed_credits, reserved_credits)
+            if req.workspace_id and reserved_credits > consumed_credits:
+                refund_reservation(
+                    req.workspace_id,
+                    reserved_credits - consumed_credits,
+                    campaign_id=req.campaign_id,
+                )
+            if req.campaign_id:
+                self._mark_campaign_cost(
+                    req.campaign_id, consumed_usd, consumed_credits,
+                )
+
             yield {
                 "event": "done",
                 "data": {
@@ -295,10 +387,50 @@ class Orchestrator:
                     "per_chunk_s": per_chunk_s,
                     "stitched": stitched,
                     "multi_scene": len(chunk_urls) > 1,
+                    "cost_usd": consumed_usd,
+                    "credits_spent": consumed_credits,
                 },
             }
-        except Exception as e:  # noqa: BLE001 \u2014 surface to client
-            yield {"event": "error", "data": {"message": str(e)}}
+        except Exception as e:  # noqa: BLE001 - surface to client
+            # Refund the *unused* portion of the reservation: the full budget
+            # minus whatever the pipeline already burned before it blew up.
+            refunded = 0.0
+            if req.workspace_id and reserved_credits > 0:
+                # On a failed run the user only pays for media that actually
+                # materialised (frames rendered / clips produced). We absorb
+                # the handful of cheap LLM calls ourselves, so a campaign that
+                # dies before the first image is fully refunded.
+                consumed_usd = estimate_campaign_cost(
+                    n_frames=frames_done,
+                    n_video_clips=clips_done,
+                    n_llm_calls=0,
+                )
+                unused = reserved_credits - price_for_user(consumed_usd)
+                if unused > 0:
+                    refund_reservation(
+                        req.workspace_id, unused, campaign_id=req.campaign_id,
+                    )
+                    refunded = round(unused, 2)
+            yield {
+                "event": "error",
+                "data": {"message": str(e), "refunded_credits": refunded},
+            }
+
+    # ---------- billing helpers ------------------------------------------------
+    @staticmethod
+    def _mark_campaign_cost(campaign_id: str, cost_usd: float,
+                            credits_spent: float) -> None:
+        """Persist the final cost on the campaign row (best-effort)."""
+        try:
+            from app.services import storage
+
+            storage.set_campaign_status(
+                campaign_id, "done",
+                total_cost_usd=cost_usd, credits_spent=credits_spent,
+            )
+        except Exception:  # noqa: BLE001 - billing bookkeeping must never
+            # break a successful generation.
+            pass
 
     # ---------- chunked script + stitching ------------------------------------
     async def _chunked_script(

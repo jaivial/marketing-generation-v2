@@ -2,9 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TopBar from '../components/TopBar';
 import { useStore } from '../lib/store';
-import { streamCampaign } from '../lib/api';
+import { streamCampaign, fetchEstimate, fetchBalance, type CampaignEstimate } from '../lib/api';
 import { Icon, toast, type IconName } from '../components/ui';
 import { cn, autoName, nFrames } from '../lib/utils';
+import { formatCredits, formatCreditsUsd } from '../lib/credits';
 import type { SseEvent, Campaign, Frame } from '../lib/types';
 
 const STEPS = [
@@ -50,6 +51,37 @@ const NewCampaign: React.FC = () => {
   const [pipelineStates, setPipelineStates] = useState<Record<string, 'active' | 'done' | 'error' | 'idle'>>({
     plan: 'idle', frame: 'idle', script: 'idle', video: 'idle',
   });
+
+  // ─── Cost preview ─────────────────────────────────────────────────────────
+  // The wizard asks the backend what a campaign of this length costs and
+  // whether the workspace can afford it. Both are advisory: the server
+  // re-checks on generate, so a stale/failed fetch never blocks the user.
+  const [estimate, setEstimate] = useState<CampaignEstimate | null>(null);
+  const [estimating, setEstimating] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    setEstimating(true);
+    fetchEstimate(duration_s)
+      .then(e => { if (alive) setEstimate(e); })
+      .catch(() => { if (alive) setEstimate(null); })
+      .finally(() => { if (alive) setEstimating(false); });
+    return () => { alive = false; };
+  }, [duration_s]);
+
+  // Balance only needs fetching once (and after a run, which spends credits).
+  useEffect(() => {
+    let alive = true;
+    fetchBalance()
+      .then(b => { if (alive) setBalance(b.balance_credits); })
+      .catch(() => { if (alive) setBalance(null); });
+    return () => { alive = false; };
+  }, [done]);
+
+  // Only block the button when we know both numbers *and* they're short.
+  const insufficient =
+    estimate !== null && balance !== null && balance < estimate.credits;
 
   const stepperRef = useRef<HTMLOListElement>(null);
   const artifactsRef = useRef<HTMLDivElement>(null);
@@ -393,9 +425,18 @@ const NewCampaign: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-6 p-3 sm:p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl text-xs sm:text-sm flex items-center justify-between">
+            <div className="mt-6 p-3 sm:p-4 bg-zinc-950/60 border border-zinc-800 rounded-xl text-xs sm:text-sm flex items-center justify-between gap-2">
               <span className="text-zinc-400">Estimated cost</span>
-              <span className="text-emerald-400 font-semibold">~$0.42</span>
+              {estimating && !estimate ? (
+                <span className="text-zinc-500">calculating…</span>
+              ) : estimate ? (
+                <span className="text-right">
+                  <span className="text-emerald-400 font-semibold">~{formatCredits(estimate.credits)} credits</span>
+                  <span className="text-zinc-500 ml-1.5">({formatCreditsUsd(estimate.credits)})</span>
+                </span>
+              ) : (
+                <span className="text-zinc-500">unavailable</span>
+              )}
             </div>
 
             <div className="flex flex-col-reverse sm:flex-row justify-between gap-2 mt-6 sm:mt-8">
@@ -510,20 +551,56 @@ const NewCampaign: React.FC = () => {
 
             <div className="flex flex-col-reverse sm:flex-row justify-between gap-2 mt-6 sm:mt-8">
               <button onClick={() => setStep(3)} disabled={running} className="btn btn-ghost">← Back</button>
-              <button onClick={startGeneration} disabled={running} className="btn btn-primary px-6">
-                {running ? (
-                  <>
-                    <Icon name="loader" size={14} className="animate-spin" strokeWidth={2} />
-                    Generating…
-                  </>
-                ) : (
-                  <>
-                    <Icon name="play" size={14} strokeWidth={2} />
-                    Generate video
-                  </>
-                )}
-              </button>
+
+              <div className="flex items-center justify-end gap-3">
+                {/* Cost preview sits right next to the Generate button. */}
+                <div className="text-right leading-tight">
+                  {estimating && !estimate ? (
+                    <span className="text-xs text-zinc-500">calculating…</span>
+                  ) : estimate ? (
+                    <>
+                      <div className={cn('text-xs sm:text-sm font-semibold',
+                        insufficient ? 'text-rose-400' : 'text-emerald-400')}>
+                        ~{formatCredits(estimate.credits)} credits
+                      </div>
+                      <div className="text-[10px] text-zinc-500">
+                        {balance !== null
+                          ? `balance ${formatCredits(balance)}`
+                          : formatCreditsUsd(estimate.credits)}
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+
+                <button
+                  onClick={startGeneration}
+                  disabled={running || insufficient}
+                  title={insufficient ? 'Not enough credits — top up or upgrade your plan' : undefined}
+                  className="btn btn-primary px-6"
+                >
+                  {running ? (
+                    <>
+                      <Icon name="loader" size={14} className="animate-spin" strokeWidth={2} />
+                      Generating…
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="play" size={14} strokeWidth={2} />
+                      Generate video
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
+
+            {insufficient && (
+              <p className="mt-3 text-xs text-rose-400 text-right">
+                Not enough credits for a {duration_s}s video.{' '}
+                <button onClick={() => navigate('/pricing')} className="underline hover:text-rose-300">
+                  Upgrade your plan
+                </button>
+              </p>
+            )}
           </>
         )}
       </div>

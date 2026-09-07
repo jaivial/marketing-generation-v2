@@ -14,3 +14,6 @@ class CampaignRequest(BaseModel):
     # Allow the orchestrator to capture web-app screenshots via agent-browser
     # and feed them to the video model. Default True (the AI decides).
     allow_screenshots: bool = Field(default=True)
+    # Workspace whose credit balance pays for the run. When omitted the run
+    # is not charged (kept optional for backward compatibility).
+    workspace_id: str | None = Field(default=None, max_length=64)
