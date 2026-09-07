@@ -62,6 +62,7 @@ def _build_req(req: CampaignRequest) -> Req:
         username=req.username,
         password=req.password,
         allow_screenshots=req.allow_screenshots,
+        workspace_id=req.workspace_id,
     )
 
 

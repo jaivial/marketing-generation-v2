@@ -416,6 +416,10 @@ ROUTE_PERMISSIONS: list[dict] = [
     {"method": "GET",  "path": "/api/admin/system",        "perm": Perm.ADMIN_SYSTEM,     "category": "admin",   "label": "System info"},
     {"method": "GET",  "path": "/api/admin/logs",          "perm": Perm.READ_LOGS,        "category": "admin",   "label": "Read logs"},
     {"method": "POST", "path": "/api/admin/logs/test",     "perm": Perm.READ_LOGS,        "category": "admin",   "label": "Emit test log"},
+
+    # Billing / credits (root only — ADMIN_SYSTEM is not granted to ADMIN)
+    {"method": "POST", "path": "/api/admin/credits/topup",  "perm": Perm.ADMIN_SYSTEM,     "category": "admin",   "label": "Top up workspace credits"},
+    {"method": "GET",  "path": "/api/admin/credits/{workspace_id}", "perm": Perm.ADMIN_SYSTEM, "category": "admin", "label": "Read workspace credit balance"},
 ]
 
 
