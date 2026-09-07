@@ -178,3 +178,69 @@ when the URL is received.
   - Tap the dark backdrop to close
   - Auto-closes when navigating between pages
 - **Touch-friendly tap targets** throughout (≥36×36px)
+
+## Stripe billing (credits)
+
+Credits are sold through **Stripe Checkout**. The integration talks to the
+Stripe REST API over plain `httpx` (no SDK) from `app/services/stripe.py`.
+
+### Configuration
+
+Two environment variables, both set in `.env` (which is gitignored):
+
+| Variable | Purpose |
+| --- | --- |
+| `STRIPE_RK_LIVE` | Global **restricted key** (`rk_live_…`). Sent as `Authorization: Bearer <key>` on every Stripe call. Server-side only. |
+| `STRIPE_WEBHOOK_SECRET` | Signing secret (`whsec_…`) used to verify that inbound webhooks really came from Stripe. |
+
+`.env.example` carries redacted placeholders (`rk_live_REPLACE_ME`,
+`whsec_REPLACE_ME`) to document the shape.
+
+> **The live key must NEVER be committed.** It belongs in `.env` only — never
+> in source, tests, logs, fixtures, or a PR description. `.gitignore` already
+> excludes `.env`; keep it that way. If a key is ever exposed, roll it
+> immediately in the Stripe dashboard. Error messages from the Stripe API are
+> passed through `stripe.redact()` before logging, because Stripe echoes the
+> presented key back in some `401` bodies.
+
+Importing `app/services/stripe.py` without `STRIPE_RK_LIVE` set raises a
+`RuntimeError` on purpose, so a misconfigured production deploy fails loudly
+instead of silently degrading. The router imports the module lazily inside
+each handler, so an unconfigured environment can still boot and serve the
+rest of the app.
+
+### Why the webhook secret matters
+
+The `/webhook` endpoint is a public, unauthenticated URL — anyone can POST to
+it. Without signature verification an attacker could forge a
+`checkout.session.completed` event and mint themselves free credits. Every
+request is therefore HMAC-SHA256 verified against the raw request body using
+`STRIPE_WEBHOOK_SECRET`, compared with `hmac.compare_digest`, and rejected
+with `400` on mismatch. Verification runs on the **raw** bytes — re-encoding
+the parsed JSON would change the payload and break the HMAC.
+
+### Endpoints
+
+- `POST /api/billing/stripe/checkout` — body `{workspace_id, credits, success_url, cancel_url}`.
+  Creates a Checkout Session and returns its URL. Pricing is
+  **1 credit = $0.01**, i.e. `cents = credits * 100`.
+- `POST /api/billing/stripe/webhook` — signed event sink. On
+  `checkout.session.completed` it calls
+  `storage.apply_credit_delta(workspace_id, delta=credits, reason='stripe')`.
+  The `workspace_id`/`credits` pair round-trips through the session metadata.
+- `GET  /api/billing/stripe/session/{session_id}` — session status.
+
+### Inspecting the key's permissions
+
+A restricted key only carries the grants selected in the dashboard. To see
+what it can do:
+
+```bash
+set -a && . ./.env && set +a
+curl -sS -H "Authorization: Bearer ${STRIPE_RK_LIVE}" \
+  https://api.stripe.com/v1/account -o docs/stripe-key-info.json
+```
+
+`docs/stripe-key-info.json` contains live account details and is gitignored —
+do not commit it. If the key lacks `customer.read`, `create_or_get_customer`
+degrades gracefully: the lookup 403s and it falls back to creating a customer.
