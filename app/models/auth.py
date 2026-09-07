@@ -23,6 +23,7 @@ class UserOut(BaseModel):
     email: EmailStr
     name: str | None = None
     email_confirmed: bool
+    workspace_id: str | None = None
 
 
 class TokenOut(BaseModel):

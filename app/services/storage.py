@@ -280,3 +280,46 @@ def list_campaign_assets(campaign_id: str) -> list[dict]:
             d["metadata"] = json.loads(d["metadata_json"])
         out.append(d)
     return out
+
+
+
+# ---------------------------------------------------------------------------
+# Email vault (encrypted Gmail SMTP credentials)
+# ---------------------------------------------------------------------------
+def upsert_email_vault(workspace_id: str, *, sender_email: str,
+                       ct_b64: str, nonce_b64: str) -> None:
+    now = time.time()
+    with get_db().write() as conn:
+        conn.execute(
+            """INSERT INTO email_vault (workspace_id, sender_email, app_password_ct,
+                                       app_password_nonce, updated_at)
+               VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(workspace_id) DO UPDATE SET
+                   sender_email = excluded.sender_email,
+                   app_password_ct = excluded.app_password_ct,
+                   app_password_nonce = excluded.app_password_nonce,
+                   updated_at = excluded.updated_at""",
+            (workspace_id, sender_email, ct_b64, nonce_b64, now),
+        )
+
+
+def get_email_vault(workspace_id: str) -> dict | None:
+    with get_db().connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM email_vault WHERE workspace_id = ?", (workspace_id,)
+        ).fetchone()
+    return dict(row) if row else None
+
+
+def delete_email_vault(workspace_id: str) -> None:
+    with get_db().write() as conn:
+        conn.execute("DELETE FROM email_vault WHERE workspace_id = ?", (workspace_id,))
+
+
+def get_workspace_by_owner(owner_id: str) -> dict | None:
+    with get_db().connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM workspaces WHERE owner_id = ? ORDER BY created_at LIMIT 1",
+            (owner_id,),
+        ).fetchone()
+    return dict(row) if row else None
