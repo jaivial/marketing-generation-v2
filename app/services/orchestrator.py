@@ -1,26 +1,58 @@
-"""Marketing-campaign orchestrator.
+"""Marketing-campaign orchestrator (v2 - chunked, 9-frame cap, stitched).
 
 Pipeline (single-responsibility, composed of injected collaborators):
 
-  1. SourceReader            \u2192 project context (local files or scraped website)
-  2. ChatClient              \u2192 prompt plan + per-scene visual prompts + script
-  3. (optional) screenshot   \u2192 capture web-app screenshots via agent-browser
-  4. MediaClient             \u2192 frames (text\u2192image)
-  5. WavespeedCLI            \u2192 decide single-scene vs multi-scene (max 3) and
-                              generate the final video clip(s).
+  1. SourceReader            -> project context (local files or scraped website)
+  2. ChatClient              -> prompt plan + per-frame visual prompts
+  3. (optional) screenshot   -> capture web-app screenshots via agent-browser
+  4. MediaClient             -> frames (text->image), hard-capped at 9 images
+  5. ChatClient              -> a *chunked* script: one VO + shot list per clip
+  6. WavespeedCLI            -> N video calls of <= 15s each, then ffmpeg stitch
+
+Orchestrator v2 rules:
+
+* The video model is hard-capped at ``MAX_CLIP_DURATION_S`` (15s) per call, so
+  ``duration_s <= 15`` produces a single clip and anything longer is split
+  into ``ceil(duration_s / 15)`` chunks (capped at ``MAX_CHUNKS`` = 6 to keep
+  cost bounded).
+* Every chunk gets its own slice of the generated frames, the same master
+  prompt, and the screenshots of the source URL (when applicable).
+* Once all chunks succeed they are concatenated into one MP4 with
+  ``ffmpeg -f concat -safe 0 -i list.txt -c copy out.mp4`` (via the existing
+  ``wavespeed_client._stitch_with_ffmpeg`` helper). The ``video`` event
+  carries the stitched URL plus every per-chunk URL under ``chunks``.
+* At most ``MAX_FRAMES`` (9) reference images are generated per campaign.
 
 SSE events emitted:  plan | frame | script | scene | screenshot | video | done | error
 """
 from __future__ import annotations
 import json
+import logging
 import math
 import re
+import shutil
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Callable
 
 from app.core.config import settings
 from app.core.protocols import ChatClient, MediaClient, SourceReader
+from app.services import wavespeed_client as _ws
 from app.services.wavespeed_client import SceneClip, ScenePlan, WavespeedCLI
+
+
+log = logging.getLogger("marketing.orchestrator")
+
+# ---------------------------------------------------------------------------
+# Orchestrator v2 hard limits
+# ---------------------------------------------------------------------------
+#: The video model (``minimax/h3/reference-to-video``) is hard-capped at 15s
+#: per call, so anything longer must be produced as several clips that are
+#: stitched together afterwards.
+MAX_CLIP_DURATION_S = 15
+#: Never fire more than this many wavespeed video calls per campaign (cost).
+MAX_CHUNKS = 6
+#: Hard cap on generated reference frames per campaign.
+MAX_FRAMES = 9
 
 
 SYSTEM = (
@@ -74,8 +106,41 @@ class Orchestrator:
 
     @staticmethod
     def _n_frames(duration_s: int) -> int:
-        # max 1 frame per 2 seconds \u2014 minimum 2 so the video has a beginning/end.
-        return max(2, math.ceil(duration_s / 2))
+        # Hard cap at 9 frames regardless of duration.
+        return max(2, min(MAX_FRAMES, math.ceil(duration_s / 2)))
+
+    @staticmethod
+    def _chunk_plan(duration_s: int) -> tuple[int, int]:
+        """Return ``(n_chunks, per_chunk_s)`` for a requested total duration.
+
+        The video model tops out at :data:`MAX_CLIP_DURATION_S` seconds per
+        call, so longer ads are split into ``ceil(duration_s / 15)`` clips
+        (never more than :data:`MAX_CHUNKS`). ``per_chunk_s`` is clamped to
+        ``[2, MAX_CLIP_DURATION_S]`` so every clip is a legal request.
+        """
+        total = max(1, int(duration_s))
+        n_chunks = min(MAX_CHUNKS, max(1, math.ceil(total / MAX_CLIP_DURATION_S)))
+        per_chunk_s = max(2, math.ceil(total / n_chunks))
+        per_chunk_s = max(2, min(MAX_CLIP_DURATION_S, per_chunk_s))
+        return n_chunks, per_chunk_s
+
+    @staticmethod
+    def _frames_for_chunk(frames: list[str], idx: int, n_chunks: int) -> list[str]:
+        """Even slice of the frame list belonging to chunk ``idx``.
+
+        ``frames[i * N // n : (i + 1) * N // n]`` -- when there are fewer
+        frames than chunks the slice can be empty, in which case we fall back
+        to the single nearest frame so every clip still gets a reference.
+        """
+        if not frames or n_chunks <= 0:
+            return []
+        n_total = len(frames)
+        start = idx * n_total // n_chunks
+        end = (idx + 1) * n_total // n_chunks
+        chunk = frames[start:end]
+        if not chunk:
+            chunk = [frames[min(n_total - 1, start)]]
+        return chunk
 
     @staticmethod
     def _extract_json(text: str) -> dict:
@@ -166,67 +231,59 @@ class Orchestrator:
                 frame_urls.append(url)
                 yield {"event": "frame", "data": {"i": i, "t": fp.get("t"), "url": url}}
 
-            # 6. Final high-quality video prompt/script
-            script = await self._chat.complete(
-                SYSTEM,
-                (
-                    f"Write a 3-sentence VO script + shot list for a {req.duration_s}s "
-                    f"video. Plan: {json.dumps(plan)}. Frames: {json.dumps(frames_plan)}."
-                ),
+            # 6. Chunked VO script + shot list. The video model is capped at
+            #    MAX_CLIP_DURATION_S per call, so we ask the LLM for one
+            #    segment per clip whose durations sum to req.duration_s.
+            n_chunks, per_chunk_s = self._chunk_plan(req.duration_s)
+            segments = await self._chunked_script(
+                req, plan, frames_plan, n_chunks, per_chunk_s,
             )
-            yield {"event": "script", "data": {"script": script}}
+            script = self._script_text(segments)
+            yield {
+                "event": "script",
+                "data": {
+                    "script": script,
+                    "segments": segments,
+                    "n_chunks": n_chunks,
+                    "per_chunk_s": per_chunk_s,
+                },
+            }
 
-            # 7. Decide the actual generation strategy and dispatch the video.
+            # 7. Generate one clip per chunk and stitch them together.
             master_prompt = (
                 f"{plan.get('hook','')}. {plan.get('tagline','')}. "
                 f"{script[:400]} Style: {req.style}."
             )
 
-            if use_multi_scene and scene_hints:
-                plan_obj = self._wavespeed.decide_scenes(
-                    duration_s=req.duration_s,
-                    scene_hints=[
-                        {
-                            "title": s.get("title") or f"Scene {i + 1}",
-                            "prompt": s.get("prompt") or master_prompt,
-                            # Spread the frame references across scenes so each
-                            # scene gets its own visual cues.
-                            "reference_images": self._refs_for_scene(
-                                frame_urls, i, len(scene_hints),
-                            ) + (screenshot_urls if i == 0 else []),
-                        }
-                        for i, s in enumerate(scene_hints)
-                    ],
-                    screenshot_urls=[],  # already merged above
+            chunk_urls: list[str] = []
+            for i in range(n_chunks):
+                seg = segments[i] if i < len(segments) else {}
+                hint = scene_hints[i] if i < len(scene_hints) else {}
+                # Each clip gets its own slice of frames + the same master
+                # prompt + the screenshots of the source URL (when applicable).
+                refs = self._frames_for_chunk(frame_urls, i, n_chunks) + screenshot_urls
+                prompt = self._chunk_prompt(
+                    master_prompt, seg, hint, i, n_chunks, per_chunk_s,
                 )
-                clip_urls = await self._wavespeed.generate_video_scenes(
-                    plan_obj, master_prompt=master_prompt,
+                chunk_urls.append(
+                    await self._wavespeed.generate_video(prompt, refs, per_chunk_s)
                 )
-                video_url = clip_urls[0] if clip_urls else ""
-                yield {
-                    "event": "video",
-                    "data": {
-                        "url": video_url,
-                        "scenes": clip_urls,
-                        "multi_scene": True,
-                        "rationale": plan_obj.rationale,
-                    },
-                }
-            else:
-                # Single-scene: include every frame plus any screenshots as
-                # references to the reference-to-video model.
-                refs = list(frame_urls) + screenshot_urls
-                video_url = await self._wavespeed.generate_video(
-                    master_prompt, refs, req.duration_s,
-                )
-                yield {
-                    "event": "video",
-                    "data": {
-                        "url": video_url,
-                        "multi_scene": False,
-                        "include_screenshots": bool(screenshot_urls),
-                    },
-                }
+
+            video_url, stitched = await self._stitch(chunk_urls)
+            yield {
+                "event": "video",
+                "data": {
+                    "url": video_url,
+                    "chunks": chunk_urls,
+                    "n_chunks": n_chunks,
+                    "per_chunk_s": per_chunk_s,
+                    "stitched": stitched,
+                    # Backwards-compatible aliases for existing clients.
+                    "scenes": chunk_urls,
+                    "multi_scene": len(chunk_urls) > 1,
+                    "include_screenshots": bool(screenshot_urls),
+                },
+            }
 
             yield {
                 "event": "done",
@@ -234,11 +291,150 @@ class Orchestrator:
                     "frames": len(frame_urls),
                     "duration_s": req.duration_s,
                     "screenshots": len(screenshot_urls),
-                    "multi_scene": use_multi_scene and bool(scene_hints),
+                    "chunks": len(chunk_urls),
+                    "per_chunk_s": per_chunk_s,
+                    "stitched": stitched,
+                    "multi_scene": len(chunk_urls) > 1,
                 },
             }
         except Exception as e:  # noqa: BLE001 \u2014 surface to client
             yield {"event": "error", "data": {"message": str(e)}}
+
+    # ---------- chunked script + stitching ------------------------------------
+    async def _chunked_script(
+        self,
+        req: CampaignRequest,
+        plan: dict,
+        frames_plan: list[dict],
+        n_chunks: int,
+        per_chunk_s: int,
+    ) -> list[dict[str, Any]]:
+        """Ask the LLM for ``n_chunks`` script segments, one per video clip.
+
+        Each segment carries its own voice-over and shot list plus a duration;
+        the durations are expected to sum to ``req.duration_s``. Falls back to
+        an evenly-split single-VO plan when the model misbehaves so the
+        pipeline never dies on a bad JSON reply.
+        """
+        user = (
+            f"Write the shooting script for a {req.duration_s}s {req.style} "
+            f"marketing video.\n"
+            f"Plan: {json.dumps(plan)}.\n"
+            f"Frames: {json.dumps(frames_plan)}.\n\n"
+            f"The video model can only render {MAX_CLIP_DURATION_S}s per call, "
+            f"so the ad is produced as exactly {n_chunks} segment(s) of about "
+            f"{per_chunk_s}s each that will be stitched together in order. "
+            f"The segment durations must sum to {req.duration_s}s and no "
+            f"single segment may exceed {MAX_CLIP_DURATION_S}s.\n\n"
+            f"Return JSON:\n"
+            f'{{"segments":[{{"index":0,"title":"<str>","duration_s":'
+            f'{per_chunk_s},"vo":"<voice-over for this segment>",'
+            f'"shots":["<shot 1>","<shot 2>"]}}]}}\n'
+            f"Give exactly {n_chunks} segment(s), in playback order, so that "
+            f"the voice-overs read as one continuous script."
+        )
+        try:
+            raw = await self._chat.complete(SYSTEM, user)
+        except Exception as e:  # noqa: BLE001
+            log.warning("chunked script generation failed: %s", e)
+            raw = ""
+        segments: list[dict[str, Any]] = []
+        try:
+            data = self._extract_json(raw)
+            raw_segments = data.get("segments") or data.get("chunks") or []
+            if isinstance(raw_segments, list):
+                for i, seg in enumerate(raw_segments[:n_chunks]):
+                    if not isinstance(seg, dict):
+                        seg = {"vo": str(seg)}
+                    shots = seg.get("shots") or seg.get("shot_list") or []
+                    if isinstance(shots, str):
+                        shots = [shots]
+                    segments.append({
+                        "index": i,
+                        "title": str(seg.get("title") or f"Segment {i + 1}"),
+                        "duration_s": per_chunk_s,
+                        "vo": str(seg.get("vo") or seg.get("script") or ""),
+                        "shots": [str(s) for s in shots],
+                    })
+        except Exception:  # noqa: BLE001 — fall through to the fallback below
+            segments = []
+
+        # Pad (or build from scratch) so there is always one segment per chunk.
+        fallback_vo = (raw or "").strip()
+        while len(segments) < n_chunks:
+            i = len(segments)
+            segments.append({
+                "index": i,
+                "title": f"Segment {i + 1}",
+                "duration_s": per_chunk_s,
+                "vo": fallback_vo[:400] if i == 0 else "",
+                "shots": [],
+            })
+        return segments[:n_chunks]
+
+    @staticmethod
+    def _script_text(segments: list[dict[str, Any]]) -> str:
+        """Flatten the chunked segments back into one human-readable script."""
+        parts: list[str] = []
+        for seg in segments:
+            head = f"[{seg.get('title')} ~{seg.get('duration_s')}s]"
+            vo = str(seg.get("vo") or "").strip()
+            shots = seg.get("shots") or []
+            block = head
+            if vo:
+                block += f" {vo}"
+            if shots:
+                block += " Shots: " + "; ".join(str(s) for s in shots)
+            parts.append(block.strip())
+        return "\n".join(p for p in parts if p)
+
+    @staticmethod
+    def _chunk_prompt(
+        master_prompt: str,
+        segment: dict[str, Any],
+        scene_hint: dict[str, Any],
+        idx: int,
+        n_chunks: int,
+        per_chunk_s: int,
+    ) -> str:
+        """Build the per-clip prompt: master prompt + this segment's beat."""
+        bits = [master_prompt]
+        if n_chunks > 1:
+            bits.append(f"Segment {idx + 1} of {n_chunks} ({per_chunk_s}s).")
+        title = str(segment.get("title") or scene_hint.get("title") or "").strip()
+        if title:
+            bits.append(f"Beat: {title}.")
+        vo = str(segment.get("vo") or "").strip()
+        if vo:
+            bits.append(f"Voice-over: {vo}")
+        shots = segment.get("shots") or []
+        if shots:
+            bits.append("Shots: " + "; ".join(str(s) for s in shots))
+        hint_prompt = str(scene_hint.get("prompt") or "").strip()
+        if hint_prompt:
+            bits.append(hint_prompt)
+        return " ".join(b for b in bits if b).strip()
+
+    async def _stitch(self, chunk_urls: list[str]) -> tuple[str, bool]:
+        """Concatenate the per-chunk clips into one MP4 with ffmpeg.
+
+        Returns ``(url, stitched)``. When there is a single clip - or ffmpeg
+        is unavailable - the first clip URL is returned untouched so the
+        pipeline degrades gracefully instead of failing.
+        """
+        if not chunk_urls:
+            return "", False
+        if len(chunk_urls) == 1:
+            return chunk_urls[0], False
+        if not shutil.which("ffmpeg"):
+            log.warning("ffmpeg not found - returning first clip unstitched")
+            return chunk_urls[0], False
+        try:
+            stitched = await _ws._stitch_with_ffmpeg(chunk_urls)
+        except Exception as e:  # noqa: BLE001
+            log.warning("ffmpeg stitching failed: %s", e)
+            return chunk_urls[0], False
+        return (stitched or chunk_urls[0]), bool(stitched)
 
     # ---------- planning -------------------------------------------------------
     async def _plan_scenes(
