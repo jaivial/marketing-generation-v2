@@ -13,6 +13,7 @@ SSE events emitted:  plan | frame | script | scene | screenshot | video | done |
 """
 from __future__ import annotations
 import json
+import logging
 import math
 import re
 from dataclasses import dataclass
@@ -20,7 +21,11 @@ from typing import Any, AsyncIterator, Callable
 
 from app.core.config import settings
 from app.core.protocols import ChatClient, MediaClient, SourceReader
+from app.services import pricing
+from app.services import storage as default_storage
 from app.services.wavespeed_client import SceneClip, ScenePlan, WavespeedCLI
+
+log = logging.getLogger(__name__)
 
 
 SYSTEM = (
@@ -41,6 +46,13 @@ class CampaignRequest:
     # source URL via agent-browser and feed them to the video model. Default
     # is True because the AI decides for each campaign.
     allow_screenshots: bool = True
+    # Owning workspace + user. When ``workspace_id`` is set the orchestrator
+    # persists the run (a ``campaigns`` row created up-front, then assets and
+    # the final plan on completion). When it is None the run is ephemeral --
+    # nothing is written to the database. This keeps the pipeline usable from
+    # scripts and tests without a database.
+    workspace_id: str | None = None
+    user_id: str | None = None
 
 
 class Orchestrator:
@@ -52,10 +64,15 @@ class Orchestrator:
         media: MediaClient,
         reader_factory: Callable[..., SourceReader],
         wavespeed: WavespeedCLI | None = None,
+        storage: Any | None = None,
     ) -> None:
         self._chat = chat
         self._media = media
         self._reader_factory = reader_factory
+        # Persistence is injected so tests can pass a FakeStorage. Defaults to
+        # the real ``app.services.storage`` module (duck-typed, module-level
+        # functions only -- no class to instantiate).
+        self._storage = storage if storage is not None else default_storage
         # The wavespeed client exposes the smart single-vs-multi decision and
         # the screenshot helper. We accept an override for tests.
         self._wavespeed = wavespeed or (
@@ -84,8 +101,131 @@ class Orchestrator:
             raise ValueError("model did not return JSON")
         return json.loads(m.group(0))
 
+    # ---------- persistence ---------------------------------------------------
+    def _create_campaign_row(self, req: CampaignRequest) -> str | None:
+        """Insert the ``campaigns`` row *before* any expensive work starts.
+
+        The row is created with status ``running`` so the Library / Campaigns
+        UI can show the campaign the instant the user hits "Generate" -- long
+        before the first frame comes back. Returns the new campaign id, or
+        None when the run is ephemeral (no workspace) or persistence fails.
+
+        A storage failure here must never abort the pipeline: the user still
+        gets their video, we just lose the history row (and log it).
+        """
+        if not req.workspace_id:
+            return None
+        try:
+            row = self._storage.create_campaign(
+                workspace_id=req.workspace_id,
+                user_id=req.user_id or req.workspace_id,
+                source_kind=req.source_kind,
+                target=req.target,
+                duration_s=req.duration_s,
+                style=req.style,
+            )
+            campaign_id = row["id"] if isinstance(row, dict) else str(row)
+            self._storage.set_campaign_status(campaign_id, "running")
+            return campaign_id
+        except Exception as e:  # noqa: BLE001 -- persistence is best-effort
+            log.warning("could not create campaign row: %s", e)
+            return None
+
+    def _persist_done(
+        self,
+        campaign_id: str,
+        req: CampaignRequest,
+        *,
+        plan: dict,
+        frame_urls: list[str],
+        script: str,
+        video_url: str,
+        screenshot_urls: list[str],
+        scene_urls: list[str],
+        multi_scene: bool,
+        budget: pricing.BudgetMeter,
+    ) -> None:
+        """Write the finished campaign: plan blob + one row per asset."""
+        try:
+            self._storage.set_campaign_status(
+                campaign_id,
+                "done",
+                plan_json={
+                    "plan": plan,
+                    "frames": frame_urls,
+                    "script": script,
+                    "video_url": video_url,
+                    "screenshots": screenshot_urls,
+                    "scenes": scene_urls,
+                    "multi_scene": multi_scene,
+                },
+                total_cost_usd=budget.consumed,
+                credits_spent=pricing.price_for_user(budget.consumed),
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not persist campaign %s: %s", campaign_id, e)
+            return
+
+        # Assets are appended individually so the Library can query them by
+        # kind without having to parse the plan blob.
+        try:
+            for i, u in enumerate(frame_urls):
+                self._storage.add_campaign_asset(
+                    campaign_id, kind="frame", url=u, metadata={"index": i},
+                )
+            for i, u in enumerate(screenshot_urls):
+                self._storage.add_campaign_asset(
+                    campaign_id, kind="screenshot", url=u, metadata={"index": i},
+                )
+            for i, u in enumerate(scene_urls):
+                self._storage.add_campaign_asset(
+                    campaign_id, kind="stitched", url=u,
+                    metadata={"scene": i},
+                )
+            if video_url:
+                self._storage.add_campaign_asset(
+                    campaign_id, kind="video", url=video_url,
+                    duration_s=req.duration_s,
+                )
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not persist assets for %s: %s", campaign_id, e)
+
+    def _persist_failed(self, campaign_id: str, message: str) -> None:
+        try:
+            self._storage.set_campaign_status(
+                campaign_id, "failed", plan_json={"error": message},
+            )
+        except Exception as e:  # noqa: BLE001
+            log.warning("could not mark campaign %s failed: %s", campaign_id, e)
+
     # ---------- main pipeline --------------------------------------------------
     async def run(self, req: CampaignRequest) -> AsyncIterator[dict]:
+        """Public entrypoint.
+
+        Creates the campaign row up-front (when the request carries a
+        workspace) and stamps ``campaign_id`` onto every SSE event so the
+        frontend knows which row to update as the run progresses.
+        """
+        campaign_id = self._create_campaign_row(req)
+        if campaign_id:
+            yield {
+                "event": "campaign",
+                "data": {"campaign_id": campaign_id, "status": "running"},
+            }
+        async for ev in self._pipeline(req, campaign_id):
+            data = ev.get("data")
+            if campaign_id and isinstance(data, dict):
+                # Shallow-copy before stamping: some events (notably "plan")
+                # yield the very dict we later persist, so mutating it in
+                # place would leak campaign_id into the stored plan blob.
+                if "campaign_id" not in data:
+                    ev = {**ev, "data": {**data, "campaign_id": campaign_id}}
+            yield ev
+
+    async def _pipeline(
+        self, req: CampaignRequest, campaign_id: str | None = None,
+    ) -> AsyncIterator[dict]:
+        budget = pricing.BudgetMeter()
         try:
             ctx = await self._ctx(req)
             n_frames = self._n_frames(req.duration_s)
@@ -100,6 +240,7 @@ class Orchestrator:
                     f"Style: {req.style}. Duration: {req.duration_s}s."
                 ),
             )
+            budget.add_chat()
             plan = self._extract_json(plan_raw)
             yield {"event": "plan", "data": plan}
 
@@ -109,6 +250,7 @@ class Orchestrator:
             #    ad. It also decides whether to embed screenshots of the web
             #    app (when the source is a URL).
             scene_decision = await self._plan_scenes(req, ctx, plan)
+            budget.add_chat()
             include_screenshots = bool(
                 scene_decision.get("include_screenshots")
                 and req.allow_screenshots
@@ -142,6 +284,7 @@ class Orchestrator:
                             password=req.password,
                         )
                         screenshot_urls.append(url)
+                        budget.add_screenshots(1)
                         yield {"event": "screenshot", "data": {"url": url, "page": page_url}}
                 except Exception as e:  # noqa: BLE001 \u2014 fall back to no screenshots
                     log_msg = f"screenshot capture failed: {e}"
@@ -157,6 +300,7 @@ class Orchestrator:
                     f"Return JSON: {{\"frames\":[{{\"t\":<sec>,\"prompt\":<str>}}...]}}"
                 ),
             )
+            budget.add_chat()
             frames_plan = self._extract_json(frames_raw).get("frames", [])[:n_frames]
 
             # 5. Render each frame (text\u2192image)
@@ -164,6 +308,7 @@ class Orchestrator:
             for i, fp in enumerate(frames_plan):
                 url = await self._media.generate_image(fp["prompt"])
                 frame_urls.append(url)
+                budget.add_images(1)
                 yield {"event": "frame", "data": {"i": i, "t": fp.get("t"), "url": url}}
 
             # 6. Final high-quality video prompt/script
@@ -174,6 +319,7 @@ class Orchestrator:
                     f"video. Plan: {json.dumps(plan)}. Frames: {json.dumps(frames_plan)}."
                 ),
             )
+            budget.add_chat()
             yield {"event": "script", "data": {"script": script}}
 
             # 7. Decide the actual generation strategy and dispatch the video.
@@ -203,6 +349,8 @@ class Orchestrator:
                     plan_obj, master_prompt=master_prompt,
                 )
                 video_url = clip_urls[0] if clip_urls else ""
+                scene_urls = list(clip_urls)
+                budget.add_video(req.duration_s)
                 yield {
                     "event": "video",
                     "data": {
@@ -219,6 +367,8 @@ class Orchestrator:
                 video_url = await self._wavespeed.generate_video(
                     master_prompt, refs, req.duration_s,
                 )
+                scene_urls = []
+                budget.add_video(req.duration_s)
                 yield {
                     "event": "video",
                     "data": {
@@ -228,16 +378,38 @@ class Orchestrator:
                     },
                 }
 
+            multi_scene = use_multi_scene and bool(scene_hints)
+
+            # Persist the finished run before announcing "done" so a client
+            # that immediately reloads the Library sees the completed row.
+            if campaign_id:
+                self._persist_done(
+                    campaign_id, req,
+                    plan=plan,
+                    frame_urls=frame_urls,
+                    script=script,
+                    video_url=video_url,
+                    screenshot_urls=screenshot_urls,
+                    scene_urls=scene_urls,
+                    multi_scene=multi_scene,
+                    budget=budget,
+                )
+
             yield {
                 "event": "done",
                 "data": {
                     "frames": len(frame_urls),
                     "duration_s": req.duration_s,
                     "screenshots": len(screenshot_urls),
-                    "multi_scene": use_multi_scene and bool(scene_hints),
+                    "multi_scene": multi_scene,
+                    "video_url": video_url,
+                    "total_cost_usd": budget.consumed,
+                    "credits_spent": pricing.price_for_user(budget.consumed),
                 },
             }
         except Exception as e:  # noqa: BLE001 \u2014 surface to client
+            if campaign_id:
+                self._persist_failed(campaign_id, str(e))
             yield {"event": "error", "data": {"message": str(e)}}
 
     # ---------- planning -------------------------------------------------------

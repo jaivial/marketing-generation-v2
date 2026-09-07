@@ -404,6 +404,9 @@ ROUTE_PERMISSIONS: list[dict] = [
     {"method": "POST", "path": "/api/campaigns",           "perm": Perm.CREATE_CAMPAIGN,  "category": "user",    "label": "Run campaign (SSE)"},
     {"method": "POST", "path": "/api/campaigns/sync",      "perm": Perm.CREATE_CAMPAIGN,  "category": "user",    "label": "Run campaign (sync JSON)"},
     {"method": "GET",  "path": "/api/campaigns/history",   "perm": Perm.VIEW_CAMPAIGNS_OWN, "category": "user",  "label": "Campaign history"},
+    # NOTE: must stay *after* /api/campaigns/history -- the templated pattern
+    # below also matches "history", and route_requires() takes the first hit.
+    {"method": "GET",  "path": "/api/campaigns/{id}",       "perm": Perm.VIEW_CAMPAIGNS_OWN, "category": "user",  "label": "Campaign detail"},
 
     # Admin / Root
     {"method": "GET",  "path": "/api/admin/roles",         "perm": Perm.ADMIN_SYSTEM,     "category": "admin",   "label": "List roles"},
