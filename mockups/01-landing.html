@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mockup 01 — Landing / Onboarding</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  .grid-bg { background-image: radial-gradient(rgba(99,102,241,0.07) 1px, transparent 1px); background-size: 32px 32px; }
+</style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen grid-bg">
+
+<!-- Top bar -->
+<header class="border-b border-zinc-800/80 backdrop-blur bg-zinc-950/70 sticky top-0 z-50">
+  <div class="max-w-7xl mx-auto px-6 h-14 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500 flex items-center justify-center">
+        <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M3 4h14v12H3z" opacity=".3"/><path d="M3 4l7 8 7-8v12H3z"/></svg>
+      </div>
+      <span class="font-semibold">Marketing<span class="text-indigo-400">Forge</span></span>
+    </div>
+    <nav class="hidden md:flex gap-6 text-sm text-zinc-400">
+      <a class="hover:text-white">Dashboard</a>
+      <a class="hover:text-white">Campaigns</a>
+      <a class="hover:text-white">Library</a>
+      <a class="hover:text-white">Integrations</a>
+      <a class="hover:text-white">Docs</a>
+    </nav>
+    <div class="flex items-center gap-3">
+      <button class="text-sm text-zinc-400 hover:text-white">Sign in</button>
+      <button class="text-sm bg-indigo-500 hover:bg-indigo-400 px-3 py-1.5 rounded-lg font-medium">Start free</button>
+    </div>
+  </div>
+</header>
+
+<!-- Hero with onboarding wizard -->
+<main class="max-w-7xl mx-auto px-6 py-12">
+  <!-- Headline -->
+  <div class="text-center mb-12">
+    <div class="inline-flex items-center gap-2 text-xs text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-1 rounded-full mb-5">
+      <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse"></span>
+      Now generating videos with MiniMax-H3 + GPT-Image-2.0
+    </div>
+    <h1 class="text-5xl md:text-6xl font-bold tracking-tight">
+      Ship <span class="bg-gradient-to-r from-indigo-400 to-fuchsia-400 bg-clip-text text-transparent">marketing videos</span><br/>
+      in minutes, not weeks.
+    </h1>
+    <p class="text-zinc-400 mt-5 max-w-2xl mx-auto text-lg">
+      Paste a URL or a project folder. We scrape, plan, render, and assemble a full campaign — script, frames, video — all in one orchestrated AI pipeline.
+    </p>
+  </div>
+
+  <!-- Onboarding wizard -->
+  <div class="max-w-4xl mx-auto">
+    <!-- Steps -->
+    <ol class="flex items-center w-full mb-8 text-sm font-medium text-center text-zinc-500">
+      <li class="flex items-center text-indigo-400">
+        <span class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-indigo-500 bg-indigo-500/10">1</span>
+        <span class="ml-2">Source</span>
+        <svg class="w-4 h-4 mx-3 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 12h14"/></svg>
+      </li>
+      <li class="flex items-center">
+        <span class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-zinc-700">2</span>
+        <span class="ml-2">Brief</span>
+        <svg class="w-4 h-4 mx-3 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 12h14"/></svg>
+      </li>
+      <li class="flex items-center">
+        <span class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-zinc-700">3</span>
+        <span class="ml-2">Style & duration</span>
+        <svg class="w-4 h-4 mx-3 text-zinc-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" d="M5 12h14"/></svg>
+      </li>
+      <li class="flex items-center">
+        <span class="flex items-center justify-center w-8 h-8 rounded-full border-2 border-zinc-700">4</span>
+        <span class="ml-2">Generate</span>
+      </li>
+    </ol>
+
+    <!-- Step card -->
+    <div class="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-8 shadow-2xl shadow-indigo-950/20">
+      <div class="flex items-start justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-semibold">Where should we look?</h2>
+          <p class="text-zinc-400 text-sm mt-1">Drop a public URL or a path to your codebase. We'll use it as creative fuel.</p>
+        </div>
+        <span class="text-xs text-zinc-500 bg-zinc-800/60 px-2 py-1 rounded">Step 1 of 4</span>
+      </div>
+
+      <!-- Source type toggle -->
+      <div class="grid grid-cols-2 gap-3 mb-5">
+        <button class="p-4 bg-indigo-500/10 border-2 border-indigo-500 rounded-xl text-left">
+          <div class="flex items-center gap-2 mb-1">
+            <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3 12h18"/></svg>
+            <span class="font-medium text-sm">Website URL</span>
+          </div>
+          <p class="text-xs text-zinc-500">Scrape with Lightpanda (fast headless)</p>
+        </button>
+        <button class="p-4 bg-zinc-900 border-2 border-zinc-800 hover:border-zinc-700 rounded-xl text-left">
+          <div class="flex items-center gap-2 mb-1">
+            <svg class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            <span class="font-medium text-sm">Local project</span>
+          </div>
+          <p class="text-xs text-zinc-500">Read source code & docs</p>
+        </button>
+      </div>
+
+      <!-- Input -->
+      <label class="block text-xs uppercase tracking-wider text-zinc-500 mb-2">URL</label>
+      <input value="https://acme-cms.io" class="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 rounded-xl px-4 py-3 text-sm placeholder-zinc-600 outline-none" placeholder="https://example.com">
+
+      <div class="flex items-center justify-between mt-8">
+        <button class="text-sm text-zinc-500 hover:text-zinc-300">← Back</button>
+        <button class="bg-indigo-500 hover:bg-indigo-400 text-white px-5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2">
+          Continue
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M5 12h14m-7-7l7 7-7 7"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Logos / social proof -->
+  <div class="text-center mt-20">
+    <p class="text-xs text-zinc-600 uppercase tracking-widest mb-4">Powered by</p>
+    <div class="flex items-center justify-center gap-10 opacity-50">
+      <span class="font-semibold">MiniMax</span>
+      <span class="font-semibold">Wavespeed</span>
+      <span class="font-semibold">Lightpanda</span>
+      <span class="font-semibold">Cloudflare</span>
+    </div>
+  </div>
+</main>
+</body>
+</html>

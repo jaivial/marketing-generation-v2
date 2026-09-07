@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mockup 08 — Final shell (new-campaign with SSE)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/htmx.org@2.0.3"></script>
+<script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+<script defer src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen" hx-ext="sse" sse-connect="/api/campaigns/_demo" sse-swap="plan,frame,script,video,done,error">
+
+<div class="flex">
+  <aside class="w-60 border-r border-zinc-800 bg-zinc-950 h-screen sticky top-0">
+    <div class="h-14 px-5 flex items-center gap-2 border-b border-zinc-800">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500"></div>
+      <span class="font-semibold">Marketing<span class="text-indigo-400">Forge</span></span>
+    </div>
+    <nav class="p-3 space-y-0.5 text-sm">
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Dashboard</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Campaigns</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Library</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Integrations</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Settings</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-8 max-w-7xl" x-data="{ step: 1, target: 'https://acme-cms.io', duration: 30, style: 'cinematic', running: false }">
+    <div class="mb-6">
+      <h1 class="text-2xl font-semibold">New campaign</h1>
+      <p class="text-sm text-zinc-400 mt-1">Generate a marketing video in 4 steps.</p>
+    </div>
+
+    <!-- Wizard steps -->
+    <ol class="flex items-center w-full mb-8 text-sm">
+      <template x-for="(s, i) in [
+        {n:1,label:'Source'},
+        {n:2,label:'Brief'},
+        {n:3,label:'Style'},
+        {n:4,label:'Generate'},
+      ]" :key="i">
+        <li class="flex items-center" :class="i < 3 ? 'flex-1' : ''">
+          <div class="flex items-center">
+            <span class="w-8 h-8 rounded-full border-2 flex items-center justify-center font-medium"
+                  :class="step >= s.n ? 'bg-indigo-500 border-indigo-500 text-white' : 'border-zinc-700 text-zinc-500'"
+                  x-text="s.n"></span>
+            <span class="ml-2" :class="step >= s.n ? 'text-white' : 'text-zinc-500'" x-text="s.label"></span>
+          </div>
+          <div x-show="i < 3" class="flex-1 h-px mx-4"
+               :class="step > s.n ? 'bg-indigo-500' : 'bg-zinc-800'"></div>
+        </li>
+      </template>
+    </ol>
+
+    <!-- Step content -->
+    <div class="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-8">
+      <div x-show="step === 1">
+        <h2 class="text-xl font-semibold mb-2">Where should we look?</h2>
+        <p class="text-zinc-400 text-sm mb-6">Drop a public URL or a path to your codebase.</p>
+        <div class="grid grid-cols-2 gap-3 mb-5">
+          <button @click="target='https://'" class="p-4 bg-indigo-500/10 border-2 border-indigo-500 rounded-xl text-left">
+            <div class="font-medium text-sm">🌐 Website URL</div>
+            <p class="text-xs text-zinc-500 mt-1">Scrape with Lightpanda</p>
+          </button>
+          <button class="p-4 bg-zinc-900 border-2 border-zinc-800 hover:border-zinc-700 rounded-xl text-left">
+            <div class="font-medium text-sm">📁 Local project</div>
+            <p class="text-xs text-zinc-500 mt-1">Read source code & docs</p>
+          </button>
+        </div>
+        <input x-model="target" class="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 rounded-xl px-4 py-3 text-sm outline-none" placeholder="https://example.com">
+        <div class="flex justify-end mt-8">
+          <button @click="step = 2" class="bg-indigo-500 hover:bg-indigo-400 text-white px-5 py-2.5 rounded-xl font-medium text-sm">Continue →</button>
+        </div>
+      </div>
+
+      <div x-show="step === 2" x-cloak>
+        <h2 class="text-xl font-semibold mb-2">What's the brief?</h2>
+        <p class="text-zinc-400 text-sm mb-6">We'll infer the rest. Optional but improves results.</p>
+        <textarea rows="5" class="w-full bg-zinc-950 border border-zinc-800 focus:border-indigo-500 rounded-xl px-4 py-3 text-sm outline-none" placeholder="e.g. Highlight the new dashboard, target PMs in SaaS, 30s teaser for Twitter…"></textarea>
+        <div class="flex justify-between mt-8">
+          <button @click="step = 1" class="text-sm text-zinc-500 hover:text-zinc-300">← Back</button>
+          <button @click="step = 3" class="bg-indigo-500 hover:bg-indigo-400 text-white px-5 py-2.5 rounded-xl font-medium text-sm">Continue →</button>
+        </div>
+      </div>
+
+      <div x-show="step === 3" x-cloak>
+        <h2 class="text-xl font-semibold mb-2">Style & duration</h2>
+        <p class="text-zinc-400 text-sm mb-6">Frames are limited to 1 per 2s automatically.</p>
+        <div class="grid grid-cols-3 gap-3 mb-5">
+          <template x-for="d in [15, 30, 45]" :key="d">
+            <button @click="duration = d" class="p-4 border-2 rounded-xl"
+                    :class="duration === d ? 'bg-indigo-500/10 border-indigo-500' : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'">
+              <div class="text-2xl font-bold" x-text="`${d}s`"></div>
+              <div class="text-xs text-zinc-500 mt-1" x-text="`max ${d/2} frames`"></div>
+            </button>
+          </template>
+        </div>
+        <div class="grid grid-cols-4 gap-2 mb-5">
+          <template x-for="s in ['cinematic','playful','corporate','documentary']" :key="s">
+            <button @click="style = s" class="px-3 py-2 text-sm border-2 rounded-lg capitalize"
+                    :class="style === s ? 'bg-indigo-500/10 border-indigo-500 text-indigo-300' : 'bg-zinc-900 border-zinc-800 text-zinc-400'">
+              <span x-text="s"></span>
+            </button>
+          </template>
+        </div>
+        <div class="flex justify-between mt-8">
+          <button @click="step = 2" class="text-sm text-zinc-500 hover:text-zinc-300">← Back</button>
+          <button @click="step = 4; running = true; htmx.trigger('body', 'sse-connect')" class="bg-indigo-500 hover:bg-indigo-400 text-white px-5 py-2.5 rounded-xl font-medium text-sm flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            Generate
+          </button>
+        </div>
+      </div>
+
+      <div x-show="step === 4" x-cloak>
+        <h2 class="text-xl font-semibold mb-2 flex items-center gap-2">
+          <span x-show="running" class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+          <span x-text="running ? 'Generating…' : 'Done!'"></span>
+        </h2>
+        <div class="grid grid-cols-2 gap-4">
+          <!-- Live frames -->
+          <div>
+            <h3 class="text-xs uppercase text-zinc-500 mb-2">Frames</h3>
+            <div id="frames" class="grid grid-cols-3 gap-2"></div>
+          </div>
+          <!-- Live log -->
+          <div>
+            <h3 class="text-xs uppercase text-zinc-500 mb-2">Event log</h3>
+            <div id="log" class="bg-zinc-950 border border-zinc-800 rounded-xl p-3 font-mono text-xs max-h-96 overflow-auto"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- HTMX SSE handlers -->
+<script>
+document.body.addEventListener('htmx:sseMessage', function(e) {
+  const ev = e.detail.type;
+  const data = JSON.parse(e.detail.data);
+  if (ev === 'frame') {
+    const f = document.createElement('div');
+    f.className = 'aspect-video rounded border border-zinc-800 relative overflow-hidden';
+    f.innerHTML = `<img src="${data.url}" class="absolute inset-0 w-full h-full object-cover"><span class="absolute bottom-1 left-1 text-[10px] bg-black/70 px-1 rounded">${data.t ?? ''}s</span>`;
+    document.getElementById('frames').appendChild(f);
+  }
+  const log = document.getElementById('log');
+  log.innerHTML += `<div class="text-zinc-500"><span class="text-zinc-600">${new Date().toLocaleTimeString()}</span> <span class="text-indigo-400">${ev}</span> <span>${JSON.stringify(data).slice(0, 60)}…</span></div>`;
+  log.scrollTop = log.scrollHeight;
+});
+</script>
+<style>[x-cloak]{display:none}</style>
+</body>
+</html>

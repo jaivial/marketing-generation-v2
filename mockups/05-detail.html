@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mockup 05 — Campaign detail</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+
+<div class="flex">
+  <aside class="w-60 border-r border-zinc-800 bg-zinc-950 h-screen sticky top-0">
+    <div class="h-14 px-5 flex items-center gap-2 border-b border-zinc-800">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500"></div>
+      <span class="font-semibold">Marketing<span class="text-indigo-400">Forge</span></span>
+    </div>
+    <nav class="p-3 space-y-0.5 text-sm">
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Dashboard</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">Campaigns</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Library</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Integrations</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Settings</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-8 max-w-6xl">
+    <!-- Breadcrumb -->
+    <div class="flex items-center gap-2 text-xs text-zinc-500 mb-2">
+      <a class="hover:text-zinc-300">Campaigns</a> / <a>Acme CMS launch</a>
+    </div>
+
+    <!-- Hero video -->
+    <div class="bg-gradient-to-br from-rose-500 via-amber-500 to-fuchsia-600 rounded-2xl aspect-video relative overflow-hidden mb-6">
+      <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+      <div class="absolute inset-0 flex items-center justify-center">
+        <button class="w-20 h-20 rounded-full bg-white/90 hover:bg-white flex items-center justify-center transition shadow-2xl">
+          <svg class="w-8 h-8 text-zinc-900 ml-1" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4l12 6-12 6V4z"/></svg>
+        </button>
+      </div>
+      <div class="absolute bottom-0 left-0 right-0 p-6">
+        <div class="flex items-end justify-between">
+          <div>
+            <h1 class="text-3xl font-bold">Acme CMS launch</h1>
+            <p class="text-zinc-200 text-sm mt-1">30s · Cinematic · Your data, your rules.</p>
+          </div>
+          <div class="flex gap-2">
+            <button class="bg-white/10 backdrop-blur hover:bg-white/20 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg> Export
+            </button>
+            <button class="bg-white/10 backdrop-blur hover:bg-white/20 text-white text-sm px-4 py-2 rounded-lg flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg> Share
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-6">
+      <!-- Main: tabs -->
+      <div class="col-span-2 space-y-6">
+        <div class="border-b border-zinc-800">
+          <nav class="flex gap-6 text-sm">
+            <a class="py-3 border-b-2 border-indigo-500 text-indigo-300 font-medium">Frames</a>
+            <a class="py-3 border-b-2 border-transparent text-zinc-400 hover:text-white">Script</a>
+            <a class="py-3 border-b-2 border-transparent text-zinc-400 hover:text-white">Source</a>
+            <a class="py-3 border-b-2 border-transparent text-zinc-400 hover:text-white">Activity</a>
+          </nav>
+        </div>
+
+        <!-- Frame timeline -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-semibold">Timeline · 8 frames</h3>
+            <div class="text-xs text-zinc-500">0:00 → 0:30</div>
+          </div>
+          <div class="grid grid-cols-4 gap-3">
+            <div class="aspect-video rounded-lg overflow-hidden border border-zinc-800 relative cursor-pointer hover:border-indigo-500/50">
+              <div class="absolute inset-0 bg-gradient-to-br from-rose-500 to-amber-500"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/70 px-1.5 py-0.5 rounded">0:00</span>
+            </div>
+            <div class="aspect-video rounded-lg overflow-hidden border border-zinc-800 relative cursor-pointer hover:border-indigo-500/50">
+              <div class="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-500"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/70 px-1.5 py-0.5 rounded">0:04</span>
+            </div>
+            <div class="aspect-video rounded-lg overflow-hidden border border-zinc-800 relative cursor-pointer hover:border-indigo-500/50">
+              <div class="absolute inset-0 bg-gradient-to-br from-cyan-500 to-blue-500"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/70 px-1.5 py-0.5 rounded">0:08</span>
+            </div>
+            <div class="aspect-video rounded-lg overflow-hidden border border-zinc-800 relative cursor-pointer hover:border-indigo-500/50">
+              <div class="absolute inset-0 bg-gradient-to-br from-emerald-500 to-teal-500"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/70 px-1.5 py-0.5 rounded">0:12</span>
+            </div>
+            <div class="aspect-video rounded-lg overflow-hidden border border-zinc-800 relative cursor-pointer hover:border-indigo-500/50">
+              <div class="absolute inset-0 bg-gradient-to-br from-amber-500 to-orange-500"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/70 px-1.5 py-0.5 rounded">0:16</span>
+            </div>
+            <div class="aspect-video rounded-lg overflow-hidden border border-zinc-800 relative cursor-pointer hover:border-indigo-500/50">
+              <div class="absolute inset-0 bg-gradient-to-br from-pink-500 to-rose-500"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/70 px-1.5 py-0.5 rounded">0:20</span>
+            </div>
+            <div class="aspect-video rounded-lg overflow-hidden border border-zinc-800 relative cursor-pointer hover:border-indigo-500/50">
+              <div class="absolute inset-0 bg-gradient-to-br from-fuchsia-500 to-purple-500"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/70 px-1.5 py-0.5 rounded">0:24</span>
+            </div>
+            <div class="aspect-video rounded-lg overflow-hidden border border-zinc-800 relative cursor-pointer hover:border-indigo-500/50">
+              <div class="absolute inset-0 bg-gradient-to-br from-zinc-500 to-zinc-700"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/70 px-1.5 py-0.5 rounded">0:30</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Script -->
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-sm">Script</h3>
+            <button class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              Edit
+            </button>
+          </div>
+          <p class="text-zinc-200 leading-relaxed text-sm">
+            Switching tools shouldn't mean switching values. Acme CMS keeps your data yours — and your workflow, sharper than ever. Own every byte. Ship every pixel.
+          </p>
+        </div>
+      </div>
+
+      <!-- Right sidebar -->
+      <div class="space-y-4">
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+          <h3 class="text-xs uppercase tracking-wider text-zinc-500 mb-3">Plan</h3>
+          <dl class="space-y-2.5 text-sm">
+            <div><dt class="text-xs text-zinc-500">Hook</dt><dd class="text-zinc-200">Your data, your rules.</dd></div>
+            <div><dt class="text-xs text-zinc-500">Tagline</dt><dd class="text-zinc-200">Own your workflow</dd></div>
+            <div><dt class="text-xs text-zinc-500">CTA</dt><dd class="text-zinc-200">Start free</dd></div>
+            <div><dt class="text-xs text-zinc-500">Audience</dt><dd class="text-zinc-200">Indie devs</dd></div>
+            <div><dt class="text-xs text-zinc-500">Tone</dt><dd class="text-zinc-200">Witty, confident</dd></div>
+          </dl>
+        </div>
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+          <h3 class="text-xs uppercase tracking-wider text-zinc-500 mb-3">Source</h3>
+          <p class="text-xs text-zinc-300 break-all">https://acme-cms.io</p>
+          <p class="text-xs text-zinc-500 mt-1">Scraped with Lightpanda · 12.4 KB</p>
+        </div>
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+          <h3 class="text-xs uppercase tracking-wider text-zinc-500 mb-3">Cost</h3>
+          <div class="text-2xl font-semibold">$0.86</div>
+          <ul class="text-xs text-zinc-500 mt-2 space-y-1">
+            <li class="flex justify-between"><span>MiniMax-M3</span><span>$0.12</span></li>
+            <li class="flex justify-between"><span>GPT-Image 2.0 × 8</span><span>$0.48</span></li>
+            <li class="flex justify-between"><span>MiniMax-H3</span><span>$0.26</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

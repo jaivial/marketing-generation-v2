@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mockup 04 — Library & detail</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+
+<div class="flex">
+  <aside class="w-60 border-r border-zinc-800 bg-zinc-950 h-screen sticky top-0">
+    <div class="h-14 px-5 flex items-center gap-2 border-b border-zinc-800">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500"></div>
+      <span class="font-semibold">Marketing<span class="text-indigo-400">Forge</span></span>
+    </div>
+    <nav class="p-3 space-y-0.5 text-sm">
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Dashboard</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Campaigns</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">Library</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Integrations</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Settings</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-8 max-w-7xl">
+    <!-- Header + filters -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-semibold">Library</h1>
+        <p class="text-sm text-zinc-400 mt-1">All your generated assets in one place.</p>
+      </div>
+      <div class="flex gap-2">
+        <div class="relative">
+          <svg class="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input class="bg-zinc-900 border border-zinc-800 rounded-lg pl-9 pr-3 py-1.5 text-sm w-64 focus:border-indigo-500 outline-none" placeholder="Search assets…">
+        </div>
+        <button class="text-sm bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M3 4h18M6 12h12m-9 8h6"/></svg>
+          Filters
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="border-b border-zinc-800 mb-6">
+      <nav class="flex gap-6 text-sm">
+        <a class="py-3 border-b-2 border-indigo-500 text-indigo-300 font-medium">All <span class="text-zinc-500 ml-1">147</span></a>
+        <a class="py-3 border-b-2 border-transparent text-zinc-400 hover:text-white">Videos <span class="text-zinc-600 ml-1">8</span></a>
+        <a class="py-3 border-b-2 border-transparent text-zinc-400 hover:text-white">Frames <span class="text-zinc-600 ml-1">131</span></a>
+        <a class="py-3 border-b-2 border-transparent text-zinc-400 hover:text-white">Scripts <span class="text-zinc-600 ml-1">8</span></a>
+      </nav>
+    </div>
+
+    <!-- Asset grid -->
+    <div class="grid grid-cols-4 gap-4">
+      <!-- Card with hover state -->
+      <div class="group rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden hover:border-indigo-500/50 transition">
+        <div class="aspect-video bg-gradient-to-br from-rose-500 via-amber-500 to-fuchsia-500 relative">
+          <div class="absolute top-2 right-2 flex gap-1">
+            <span class="text-[10px] bg-black/70 backdrop-blur px-1.5 py-0.5 rounded">30s</span>
+          </div>
+          <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/40">
+            <button class="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
+              <svg class="w-5 h-5 text-zinc-900 ml-0.5" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4l12 6-12 6V4z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="p-3">
+          <p class="text-sm font-medium truncate">Acme CMS launch</p>
+          <p class="text-xs text-zinc-500 mt-1">2h ago · 8 frames</p>
+        </div>
+      </div>
+
+      <div class="group rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden hover:border-indigo-500/50 transition">
+        <div class="aspect-video bg-gradient-to-br from-indigo-500 to-violet-500 relative">
+          <div class="absolute top-2 right-2 flex gap-1">
+            <span class="text-[10px] bg-black/70 backdrop-blur px-1.5 py-0.5 rounded">15s</span>
+            <span class="text-[10px] bg-amber-500/80 backdrop-blur px-1.5 py-0.5 rounded">Generating</span>
+          </div>
+        </div>
+        <div class="p-3">
+          <p class="text-sm font-medium truncate">Q4 product teaser</p>
+          <p class="text-xs text-zinc-500 mt-1">12m ago · 4 / 8 frames</p>
+        </div>
+      </div>
+
+      <div class="group rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden hover:border-indigo-500/50 transition">
+        <div class="aspect-video bg-gradient-to-br from-cyan-500 to-blue-500 relative">
+          <div class="absolute top-2 right-2 flex gap-1">
+            <span class="text-[10px] bg-black/70 backdrop-blur px-1.5 py-0.5 rounded">45s</span>
+          </div>
+          <div class="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition bg-black/40">
+            <button class="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
+              <svg class="w-5 h-5 text-zinc-900 ml-0.5" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4l12 6-12 6V4z"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="p-3">
+          <p class="text-sm font-medium truncate">Black friday promo</p>
+          <p class="text-xs text-zinc-500 mt-1">1d ago · 23 frames</p>
+        </div>
+      </div>
+
+      <div class="group rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden hover:border-indigo-500/50 transition">
+        <div class="aspect-video bg-gradient-to-br from-violet-500 to-pink-500 relative">
+          <div class="absolute top-2 right-2 flex gap-1">
+            <span class="text-[10px] bg-rose-500/80 backdrop-blur px-1.5 py-0.5 rounded">Failed</span>
+          </div>
+        </div>
+        <div class="p-3">
+          <p class="text-sm font-medium truncate">Holiday story</p>
+          <p class="text-xs text-zinc-500 mt-1">3d ago · 5 frames</p>
+        </div>
+      </div>
+
+      <!-- 4 more dummy cards -->
+      <div class="group rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden hover:border-indigo-500/50 transition">
+        <div class="aspect-video bg-gradient-to-br from-amber-500 to-orange-500 relative">
+          <div class="absolute top-2 right-2 flex gap-1">
+            <span class="text-[10px] bg-black/70 backdrop-blur px-1.5 py-0.5 rounded">30s</span>
+          </div>
+        </div>
+        <div class="p-3"><p class="text-sm font-medium truncate">SaaS launch v2</p><p class="text-xs text-zinc-500 mt-1">5d ago</p></div>
+      </div>
+      <div class="group rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden hover:border-indigo-500/50 transition">
+        <div class="aspect-video bg-gradient-to-br from-emerald-500 to-lime-500 relative">
+          <div class="absolute top-2 right-2 flex gap-1">
+            <span class="text-[10px] bg-black/70 backdrop-blur px-1.5 py-0.5 rounded">15s</span>
+          </div>
+        </div>
+        <div class="p-3"><p class="text-sm font-medium truncate">Etsy store promo</p><p class="text-xs text-zinc-500 mt-1">1w ago</p></div>
+      </div>
+      <div class="group rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden hover:border-indigo-500/50 transition">
+        <div class="aspect-video bg-gradient-to-br from-pink-500 to-rose-500 relative">
+          <div class="absolute top-2 right-2 flex gap-1">
+            <span class="text-[10px] bg-black/70 backdrop-blur px-1.5 py-0.5 rounded">30s</span>
+          </div>
+        </div>
+        <div class="p-3"><p class="text-sm font-medium truncate">Brand intro</p><p class="text-xs text-zinc-500 mt-1">2w ago</p></div>
+      </div>
+      <div class="group rounded-xl border border-zinc-800 bg-zinc-900/40 overflow-hidden hover:border-indigo-500/50 transition">
+        <div class="aspect-video bg-gradient-to-br from-fuchsia-500 to-indigo-500 relative">
+          <div class="absolute top-2 right-2 flex gap-1">
+            <span class="text-[10px] bg-black/70 backdrop-blur px-1.5 py-0.5 rounded">45s</span>
+          </div>
+        </div>
+        <div class="p-3"><p class="text-sm font-medium truncate">Annual recap</p><p class="text-xs text-zinc-500 mt-1">3w ago</p></div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

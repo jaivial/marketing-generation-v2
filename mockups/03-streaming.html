@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mockup 03 — Live generation stream</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body { font-family: 'Inter', system-ui, sans-serif; }</style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 min-h-screen">
+
+<div class="flex">
+  <!-- Sidebar (compact) -->
+  <aside class="w-60 border-r border-zinc-800 bg-zinc-950 h-screen sticky top-0">
+    <div class="h-14 px-5 flex items-center gap-2 border-b border-zinc-800">
+      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-500 to-fuchsia-500"></div>
+      <span class="font-semibold">Marketing<span class="text-indigo-400">Forge</span></span>
+    </div>
+    <nav class="p-3 space-y-0.5 text-sm">
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Dashboard</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">Campaigns</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Library</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Integrations</a>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-zinc-400">Settings</a>
+    </nav>
+  </aside>
+
+  <main class="flex-1 p-8 max-w-7xl">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <div class="flex items-center gap-2 text-xs text-zinc-500 mb-1">
+          <a>Campaigns</a> / <a>Q4 product teaser</a>
+        </div>
+        <h1 class="text-2xl font-semibold">Q4 product teaser</h1>
+        <p class="text-sm text-zinc-400 mt-1">15s · Cinematic · 4 frames · 1.2M tokens</p>
+      </div>
+      <div class="flex gap-2">
+        <button class="text-sm bg-zinc-900 border border-zinc-800 hover:border-zinc-700 px-3 py-1.5 rounded-lg">Save draft</button>
+        <button class="text-sm bg-rose-500/10 text-rose-400 border border-rose-500/20 hover:bg-rose-500/20 px-3 py-1.5 rounded-lg">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Pipeline progress -->
+    <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-5 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-semibold flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+          Generating…
+        </h2>
+        <span class="text-xs text-zinc-500">Step 3 of 4 · Frames</span>
+      </div>
+      <div class="space-y-3">
+        <div class="flex items-center gap-3">
+          <div class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">✓</div>
+          <span class="text-sm text-zinc-300 flex-1">Plan · {hook, tagline, cta, audience, tone}</span>
+          <span class="text-xs text-zinc-500">3.2s</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">✓</div>
+          <span class="text-sm text-zinc-300 flex-1">Frame plan · 8 visual prompts</span>
+          <span class="text-xs text-zinc-500">1.4s</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-300 flex items-center justify-center text-xs border-2 border-indigo-500">
+            <svg class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </div>
+          <span class="text-sm text-zinc-300 flex-1">Render frames · 4 / 8</span>
+          <div class="h-1 w-24 bg-zinc-800 rounded-full overflow-hidden">
+            <div class="h-full bg-indigo-500" style="width: 50%"></div>
+          </div>
+          <span class="text-xs text-zinc-500">~ 8s</span>
+        </div>
+        <div class="flex items-center gap-3 opacity-50">
+          <div class="w-6 h-6 rounded-full bg-zinc-800 text-zinc-500 flex items-center justify-center text-xs">4</div>
+          <span class="text-sm text-zinc-500 flex-1">Video · MiniMax-H3</span>
+          <span class="text-xs text-zinc-600">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-6">
+      <!-- Left: live stream + frames -->
+      <div class="col-span-2 space-y-6">
+        <!-- Frames grid -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-sm uppercase tracking-wider text-zinc-400">Frames</h3>
+            <span class="text-xs text-zinc-500">8 max · 1 per 2s</span>
+          </div>
+          <div class="grid grid-cols-4 gap-3">
+            <!-- Completed frames -->
+            <div class="aspect-video rounded-lg bg-zinc-900 border border-zinc-800 relative overflow-hidden group">
+              <div class="absolute inset-0 bg-gradient-to-br from-rose-500 to-amber-500 opacity-80"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/60 px-1.5 py-0.5 rounded">0:00</span>
+            </div>
+            <div class="aspect-video rounded-lg bg-zinc-900 border border-zinc-800 relative overflow-hidden group">
+              <div class="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-500 opacity-80"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/60 px-1.5 py-0.5 rounded">0:02</span>
+            </div>
+            <div class="aspect-video rounded-lg bg-zinc-900 border border-zinc-800 relative overflow-hidden group">
+              <div class="absolute inset-0 bg-gradient-to-br from-cyan-500 to-blue-500 opacity-80"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/60 px-1.5 py-0.5 rounded">0:04</span>
+            </div>
+            <div class="aspect-video rounded-lg bg-zinc-900 border border-zinc-800 relative overflow-hidden group">
+              <div class="absolute inset-0 bg-gradient-to-br from-emerald-500 to-teal-500 opacity-80"></div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-black/60 px-1.5 py-0.5 rounded">0:06</span>
+            </div>
+            <!-- In-progress -->
+            <div class="aspect-video rounded-lg bg-zinc-900 border-2 border-indigo-500/40 relative overflow-hidden">
+              <div class="absolute inset-0 bg-gradient-to-br from-zinc-800 to-zinc-900"></div>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <svg class="w-6 h-6 text-indigo-400 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9"/></svg>
+              </div>
+              <span class="absolute bottom-1 left-1 text-[10px] bg-indigo-500/30 text-indigo-200 px-1.5 py-0.5 rounded">0:08</span>
+            </div>
+            <!-- Queued -->
+            <div class="aspect-video rounded-lg bg-zinc-900/40 border border-dashed border-zinc-800 flex items-center justify-center">
+              <span class="text-xs text-zinc-600">0:10</span>
+            </div>
+            <div class="aspect-video rounded-lg bg-zinc-900/40 border border-dashed border-zinc-800 flex items-center justify-center">
+              <span class="text-xs text-zinc-600">0:12</span>
+            </div>
+            <div class="aspect-video rounded-lg bg-zinc-900/40 border border-dashed border-zinc-800 flex items-center justify-center">
+              <span class="text-xs text-zinc-600">0:14</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live event log -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="font-semibold text-sm uppercase tracking-wider text-zinc-400">Event stream</h3>
+            <div class="flex gap-1 text-xs">
+              <button class="px-2 py-1 rounded bg-zinc-800 text-zinc-300">All</button>
+              <button class="px-2 py-1 rounded text-zinc-500 hover:text-zinc-300">Errors</button>
+            </div>
+          </div>
+          <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 font-mono text-xs space-y-1.5 max-h-80 overflow-auto">
+            <div class="flex gap-2 text-zinc-500"><span class="text-zinc-600">21:36:02</span><span class="text-indigo-400">plan</span><span>hook="Your data, your rules." · tagline="Own your workflow"</span></div>
+            <div class="flex gap-2 text-zinc-500"><span class="text-zinc-600">21:36:04</span><span class="text-indigo-400">frame-plan</span><span>8 visual prompts</span></div>
+            <div class="flex gap-2 text-zinc-500"><span class="text-zinc-600">21:36:06</span><span class="text-emerald-400">frame[0]</span><span>t=0 url=https://cdn.wavespeed.ai/...</span></div>
+            <div class="flex gap-2 text-zinc-500"><span class="text-zinc-600">21:36:07</span><span class="text-emerald-400">frame[1]</span><span>t=2 url=https://cdn.wavespeed.ai/...</span></div>
+            <div class="flex gap-2 text-zinc-500"><span class="text-zinc-600">21:36:08</span><span class="text-emerald-400">frame[2]</span><span>t=4 url=https://cdn.wavespeed.ai/...</span></div>
+            <div class="flex gap-2 text-zinc-500"><span class="text-zinc-600">21:36:10</span><span class="text-emerald-400">frame[3]</span><span>t=6 url=https://cdn.wavespeed.ai/...</span></div>
+            <div class="flex gap-2 text-zinc-500"><span class="text-zinc-600">21:36:11</span><span class="text-amber-400">frame[4]</span><span>rendering…</span></div>
+            <div class="flex gap-2 text-zinc-500"><span class="text-zinc-600">21:36:11</span><span class="text-zinc-500">script</span><span>pending</span></div>
+            <div class="flex gap-2 text-zinc-500"><span class="text-zinc-600">21:36:11</span><span class="text-zinc-500">video</span><span>pending</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: plan + script preview -->
+      <div class="space-y-4">
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+          <h3 class="text-xs uppercase tracking-wider text-zinc-500 mb-3">Plan</h3>
+          <dl class="space-y-2 text-sm">
+            <div><dt class="text-xs text-zinc-500">Hook</dt><dd class="text-zinc-200">Your data, your rules.</dd></div>
+            <div><dt class="text-xs text-zinc-500">Tagline</dt><dd class="text-zinc-200">Own your workflow</dd></div>
+            <div><dt class="text-xs text-zinc-500">CTA</dt><dd class="text-zinc-200">Start free</dd></div>
+            <div><dt class="text-xs text-zinc-500">Audience</dt><dd class="text-zinc-200">Indie devs</dd></div>
+            <div><dt class="text-xs text-zinc-500">Tone</dt><dd class="text-zinc-200">Witty, confident</dd></div>
+          </dl>
+        </div>
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+          <h3 class="text-xs uppercase tracking-wider text-zinc-500 mb-3">Script</h3>
+          <p class="text-sm text-zinc-300 italic">"Switching tools shouldn't mean switching values. Forge keeps your data yours — and your workflow, sharper than ever."</p>
+        </div>
+        <div class="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4">
+          <h3 class="text-xs uppercase tracking-wider text-zinc-500 mb-3">Cost</h3>
+          <div class="text-2xl font-semibold">$0.42</div>
+          <p class="text-xs text-zinc-500 mt-1">GPT-Image 2.0 × 4 · MiniMax-M3 × 3</p>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>
