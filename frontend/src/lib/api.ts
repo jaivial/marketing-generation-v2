@@ -296,3 +296,85 @@ export async function adminListRoutes(): Promise<AdminAclMatrix['routes']> {
   if (!r.ok) throw new Error(`list routes failed: ${r.status}`);
   return r.json();
 }
+
+
+// ─── Billing ────────────────────────────────────────────────────────────────
+// All amounts are in credits. Use lib/credits.ts to render dollars.
+
+export interface BillingPlan {
+  name: string;
+  tagline: string;
+  monthly_credits: number;
+  price_usd: number;
+  /** Marginal credits per second of video — used for the max-duration hint. */
+  cost_per_sec: number;
+}
+
+export interface BillingBalance {
+  workspace_id: string;
+  balance_credits: number;
+}
+
+export interface CampaignEstimate {
+  duration_s: number;
+  n_frames: number;
+  credits: number;
+  usd: number;
+  credit_usd: number;
+}
+
+export interface CheckoutResult {
+  ok: boolean;
+  workspace_id: string;
+  plan_name: string;
+  monthly_credits: number;
+  since: number;
+}
+
+export async function fetchPlans(): Promise<BillingPlan[]> {
+  const r = await fetch(`${apiBase}/api/billing/plans`, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`fetch plans failed: ${r.status}`);
+  return r.json();
+}
+
+/** Omit `workspaceId` to get the caller's own workspace balance. */
+export async function fetchBalance(workspaceId?: string): Promise<BillingBalance> {
+  const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  const r = await fetch(`${apiBase}/api/billing/balance${qs}`, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`fetch balance failed: ${r.status}`);
+  return r.json();
+}
+
+export interface MyWorkspace {
+  workspace_id: string;
+  plan_name: string | null;
+  balance_credits: number;
+}
+
+/** Bootstrap: which workspace am I, what plan am I on, what's my balance. */
+export async function fetchMyWorkspace(): Promise<MyWorkspace> {
+  const r = await fetch(`${apiBase}/api/billing/workspace`, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`fetch workspace failed: ${r.status}`);
+  return r.json();
+}
+
+export async function checkoutPlan(workspaceId: string, planName: string): Promise<CheckoutResult> {
+  const r = await fetch(`${apiBase}/api/billing/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ workspace_id: workspaceId, plan_name: planName }),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    throw new Error(`checkout failed: ${r.status} ${txt}`);
+  }
+  return r.json();
+}
+
+export async function fetchEstimate(durationS: number): Promise<CampaignEstimate> {
+  const r = await fetch(`${apiBase}/api/campaigns/estimate?duration_s=${durationS}`, {
+    headers: authHeaders(),
+  });
+  if (!r.ok) throw new Error(`fetch estimate failed: ${r.status}`);
+  return r.json();
+}

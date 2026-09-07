@@ -25,10 +25,20 @@ from app.services.campaign_view import (
     campaign_summary,
 )
 from app.services.orchestrator import CampaignRequest as Req
+from app.api.billing import (
+    router as billing_router,
+    campaigns_router as billing_campaigns_router,
+)
 
 
 router = APIRouter()
 STATIC = pathlib.Path(__file__).parent.parent.parent / "static"
+
+# Billing lives in its own module but is mounted here so app/main.py (shipped
+# in PR #3) doesn't need to change. Final paths: /api/billing/* and
+# /api/campaigns/estimate.
+router.include_router(billing_router)
+router.include_router(billing_campaigns_router)
 
 
 # \u2500\u2500\u2500 Public \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
@@ -81,11 +91,15 @@ def _build_req(req: CampaignRequest,
                principal: Principal | None = None) -> Req:
     """Convert the API DTO into the orchestrator's domain request.
 
-    When we can resolve a workspace for the caller we pass it down so the
-    orchestrator persists the run; otherwise the run stays ephemeral and the
-    pipeline behaves exactly as it did before.
+    The workspace serves double duty: it is what the orchestrator charges
+    credits against *and* what it persists the run under. An explicit
+    ``workspace_id`` on the DTO wins (that is what the billing wizard
+    sends); otherwise we resolve it from the caller. When neither yields a
+    workspace the run stays ephemeral and uncharged, exactly as before.
     """
-    workspace_id = workspace_id_for(principal) if principal else None
+    workspace_id = req.workspace_id or (
+        workspace_id_for(principal) if principal else None
+    )
     return Req(
         source_kind=req.source_kind,
         target=req.target,

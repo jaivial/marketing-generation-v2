@@ -288,3 +288,11 @@ def acl_matrix(_: Principal = Depends(require_root())):
         "permissions": PERMISSION_LIST,
         "routes": _ROUTE_PERMISSIONS,
     }
+
+
+# ─── Credits (root only) ───────────────────────────────────────────────────
+# Mounted here rather than in main.py so the whole admin surface stays behind
+# a single `/api/admin` prefix.
+from app.api.admin_credits import router as _credits_router  # noqa: E402
+
+router.include_router(_credits_router)

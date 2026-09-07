@@ -404,9 +404,20 @@ ROUTE_PERMISSIONS: list[dict] = [
     {"method": "POST", "path": "/api/campaigns",           "perm": Perm.CREATE_CAMPAIGN,  "category": "user",    "label": "Run campaign (SSE)"},
     {"method": "POST", "path": "/api/campaigns/sync",      "perm": Perm.CREATE_CAMPAIGN,  "category": "user",    "label": "Run campaign (sync JSON)"},
     {"method": "GET",  "path": "/api/campaigns/history",   "perm": Perm.VIEW_CAMPAIGNS_OWN, "category": "user",  "label": "Campaign history"},
-    # NOTE: must stay *after* /api/campaigns/history -- the templated pattern
-    # below also matches "history", and route_requires() takes the first hit.
+    {"method": "GET",  "path": "/api/campaigns/estimate",  "perm": Perm.VIEW_DASHBOARD,   "category": "user",    "label": "Campaign cost estimate"},
+    # NOTE: must stay *after* the literal /api/campaigns/* routes above --
+    # this templated pattern also matches "history"/"estimate", and
+    # route_requires() takes the first hit.
     {"method": "GET",  "path": "/api/campaigns/{id}",       "perm": Perm.VIEW_CAMPAIGNS_OWN, "category": "user",  "label": "Campaign detail"},
+
+    # Billing. The plan table is public so guests can browse pricing; the
+    # rest needs at least a dashboard-capable role, and topup is root-only
+    # (enforced by require_root() on the endpoint itself).
+    {"method": "GET",  "path": "/api/billing/plans",       "perm": None,                  "category": "public",  "label": "Price table"},
+    {"method": "GET",  "path": "/api/billing/balance",     "perm": Perm.VIEW_DASHBOARD,   "category": "user",    "label": "Credit balance"},
+    {"method": "GET",  "path": "/api/billing/workspace",   "perm": Perm.VIEW_DASHBOARD,   "category": "user",    "label": "My workspace + plan"},
+    {"method": "POST", "path": "/api/billing/checkout",    "perm": Perm.VIEW_DASHBOARD,   "category": "user",    "label": "Choose plan"},
+    {"method": "POST", "path": "/api/billing/topup",       "perm": Perm.WRITE_BILLING,    "category": "admin",   "label": "Grant credits (root only)"},
 
     # Admin / Root
     {"method": "GET",  "path": "/api/admin/roles",         "perm": Perm.ADMIN_SYSTEM,     "category": "admin",   "label": "List roles"},
@@ -419,6 +430,10 @@ ROUTE_PERMISSIONS: list[dict] = [
     {"method": "GET",  "path": "/api/admin/system",        "perm": Perm.ADMIN_SYSTEM,     "category": "admin",   "label": "System info"},
     {"method": "GET",  "path": "/api/admin/logs",          "perm": Perm.READ_LOGS,        "category": "admin",   "label": "Read logs"},
     {"method": "POST", "path": "/api/admin/logs/test",     "perm": Perm.READ_LOGS,        "category": "admin",   "label": "Emit test log"},
+
+    # Billing / credits (root only — ADMIN_SYSTEM is not granted to ADMIN)
+    {"method": "POST", "path": "/api/admin/credits/topup",  "perm": Perm.ADMIN_SYSTEM,     "category": "admin",   "label": "Top up workspace credits"},
+    {"method": "GET",  "path": "/api/admin/credits/{workspace_id}", "perm": Perm.ADMIN_SYSTEM, "category": "admin", "label": "Read workspace credit balance"},
 ]
 
 

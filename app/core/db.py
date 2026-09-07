@@ -177,6 +177,14 @@ CREATE TABLE IF NOT EXISTS campaign_assets (
     created_at   REAL NOT NULL
 );
 
+-- Which subscription plan a workspace has chosen. One row per workspace;
+-- re-checking out simply overwrites it (see app/api/billing.py checkout).
+CREATE TABLE IF NOT EXISTS workspace_plan (
+    workspace_id TEXT PRIMARY KEY REFERENCES workspaces(id) ON DELETE CASCADE,
+    plan_name    TEXT NOT NULL,
+    since        REAL NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_assets_campaign ON campaign_assets(campaign_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_ws       ON credit_ledger(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_campaigns_ws    ON campaigns(workspace_id);

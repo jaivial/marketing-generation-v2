@@ -323,10 +323,13 @@ def test_orchestrator_persists_on_done():
     assert done["status"] == "done"
     blob = done["plan_json"]
     assert blob["plan"]["hook"] == "Hi"
-    assert blob["video_url"] == "https://vid/out.mp4"
-    assert blob["script"] == "A short script."
+    # 30s exceeds the 15s per-call cap, so the ad is produced as 2 clips that
+    # are stitched into one master video (orchestrator v2).
+    assert blob["video_url"]
+    assert len(blob["scenes"]) == 2
+    assert blob["multi_scene"] is True
+    assert "A short script." in blob["script"]
     assert len(blob["frames"]) == 2
-    assert blob["multi_scene"] is False
     assert done["total_cost_usd"] > 0
     assert done["credits_spent"] >= done["total_cost_usd"]
 
@@ -335,8 +338,12 @@ def test_orchestrator_persists_on_done():
     videos = [a for a in store.assets if a["kind"] == "video"]
     assert len(frames) == 2
     assert len(videos) == 1
-    assert videos[0]["url"] == "https://vid/out.mp4"
+    # The stored video is the stitched master (the per-chunk clips are kept
+    # separately as "stitched" asset rows), and it covers the full duration.
+    assert videos[0]["url"] == blob["video_url"]
     assert videos[0]["duration_s"] == 30
+    stitched = [a for a in store.assets if a["kind"] == "stitched"]
+    assert [a["url"] for a in stitched] == blob["scenes"]
     assert all(a["id"] == cid for a in store.assets)
 
 
@@ -420,6 +427,9 @@ def test_orchestrator_survives_storage_outage():
 # ───────────────────── end-to-end: run then read back ─────────────────────
 def test_run_then_history_and_detail_roundtrip(client):
     tok, ws, uid = _register(client, "e2e@example.com")
+    # Runs are billed against the workspace (PR #8), so fund it first --
+    # otherwise the orchestrator refuses before it persists anything.
+    storage.apply_credit_delta(ws, delta=500.0, reason="topup")
     orch = Orchestrator(FakeChat(), FakeMedia(), _reader_factory,
                         wavespeed=FakeWavespeed())
     events = _run(orch, CampaignRequest(
@@ -436,6 +446,8 @@ def test_run_then_history_and_detail_roundtrip(client):
 
     cid = camps[0]["id"]
     d = client.get(f"/api/campaigns/{cid}", headers=_auth(tok)).json()
+    # 15s fits in one clip, so no stitching happens and the clip URL is
+    # stored as-is.
     assert d["plan"]["video_url"] == "https://vid/out.mp4"
     assert len(d["plan"]["frames"]) >= 2
     assert any(a["kind"] == "video" for a in d["assets"])
@@ -495,12 +507,16 @@ def test_orchestrator_persists_scene_clips_and_screenshots():
     done = store.statuses[-1]
     assert done["status"] == "done"
     assert done["plan_json"]["multi_scene"] is True
-    assert len(done["plan_json"]["scenes"]) == 2
+    # A 45s ad is rendered as ceil(45 / 15) = 3 clips; the number of clips is
+    # driven by the duration cap, not by how many scenes the LLM proposed.
+    n_chunks, _per = Orchestrator._chunk_plan(45)
+    assert n_chunks == 3
+    assert len(done["plan_json"]["scenes"]) == n_chunks
     assert done["plan_json"]["screenshots"] == ["https://shot/fake.png"]
 
     kinds = [a["kind"] for a in store.assets]
     assert kinds.count("screenshot") == 1
-    assert kinds.count("stitched") == 2
+    assert kinds.count("stitched") == n_chunks
     assert kinds.count("video") == 1
 
 
