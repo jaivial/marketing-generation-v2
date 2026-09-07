@@ -79,7 +79,7 @@ def test_decide_scenes_long_caps_at_max_scenes():
 def test_decide_scenes_partial_uses_evenly_split_per_scene():
     cli = WavespeedCLI(bin_path="/bin/true")
     plan = cli.decide_scenes(duration_s=45)
-    # 45 / 3 = 15 per clip (well under the 30s cap).
+    # 45 / 3 = 15 per clip (exactly the 15s per-call cap).
     assert all(c.duration_s <= settings.wavespeed_video_max_duration_s for c in plan.clips)
     assert sum(c.duration_s for c in plan.clips) >= 30  # never truncate below 2/clip
 
@@ -106,7 +106,7 @@ def test_generate_video_passes_reference_images_as_json_array():
         ))
     assert url == "https://vid/out.mp4"
     assert captured["model"] == settings.wavespeed_video_model
-    assert "alibaba/wan-3.0/reference-to-video" in captured["model"]
+    assert "minimax/h3/reference-to-video" in captured["model"]
     inputs = captured["inputs"]
     assert inputs["prompt"] == "ad copy"
     assert inputs["reference_images"] == ["https://img/a.png", "https://img/b.png"]

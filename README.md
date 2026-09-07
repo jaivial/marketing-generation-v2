@@ -5,9 +5,9 @@ Minimal Python service that orchestrates AI to generate marketing video campaign
 ## Pipeline
 1. **Source** — local files OR website scraped via `lightpanda fetch`.
 2. **Plan** — `MiniMax-M3` via MiniMax REST → JSON `{hook, tagline, cta, audience, tone}`.
-3. **Frames** — `gpt-image-2.0image` via `wavespeed` CLI, **max 1 per 2s** (15s→8, 30s→15, 45s→23).
+3. **Frames** — `wavespeed-ai/z-image/turbo` (text→image) via `wavespeed` CLI, **max 1 per 2s** (15s→8, 30s→15, 45s→23). Reference-image guided frames use `wavespeed-ai/z-image-turbo/image-to-image`.
 4. **Script** — high-quality VO script from `MiniMax-M3`.
-5. **Video** — frames + master prompt + duration → `alibaba/wan-3.0/reference-to-video` via `wavespeed` (https://wavespeed.ai/models/alibaba/wan-3.0/reference-to-video). The orchestrator asks the LLM to decide between **single-scene** (one wavespeed call with every reference image) and **multi-scene** (up to 3 wavespeed calls, each one logical scene, stitched with ffmpeg). Screenshots of the source web app can be captured via `agent-browser` and embedded as references.
+5. **Video** — frames + master prompt + duration → `minimax/h3/reference-to-video` via `wavespeed` (https://wavespeed.ai/models/minimax/h3/reference-to-video), **max 15s per call**. The orchestrator asks the LLM to decide between **single-scene** (one wavespeed call with every reference image) and **multi-scene** (up to 3 wavespeed calls, each one logical scene, stitched with ffmpeg). Screenshots of the source web app can be captured via `agent-browser` and embedded as references.
 
 ## Architecture (SOLID)
 - **S** — each module has one job (`config`, `protocols`, `*_client`, `orchestrator`, `routes`).
