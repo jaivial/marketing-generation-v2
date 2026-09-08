@@ -5,9 +5,10 @@ Minimal Python service that orchestrates AI to generate marketing video campaign
 ## Pipeline
 1. **Source** — local files OR website scraped via `lightpanda fetch`.
 2. **Plan** — `MiniMax-M3` via MiniMax REST → JSON `{hook, tagline, cta, audience, tone}`.
-3. **Frames** — `gpt-image-2.0image` via `wavespeed` CLI, **max 1 per 2s** (15s→8, 30s→15, 45s→23).
-4. **Script** — high-quality VO script from `MiniMax-M3`.
-5. **Video** — frames + master prompt + duration → `alibaba/wan-3.0/reference-to-video` via `wavespeed` (https://wavespeed.ai/models/alibaba/wan-3.0/reference-to-video). The orchestrator asks the LLM to decide between **single-scene** (one wavespeed call with every reference image) and **multi-scene** (up to 3 wavespeed calls, each one logical scene, stitched with ffmpeg). Screenshots of the source web app can be captured via `agent-browser` and embedded as references.
+3. **Frames** — `wavespeed-ai/z-image/turbo` (text→image) via `wavespeed` CLI, **max 1 per 2s and hard-capped at 9 images** per campaign (15s→8, 30s→9, 45s→9). Reference-image guided frames use `wavespeed-ai/z-image-turbo/image-to-image`.
+4. **Script** — *chunked* VO script from `MiniMax-M3`: one segment (voice-over + shot list) per video clip.
+5. **Video** — frames + master prompt + duration → `minimax/h3/reference-to-video` via `wavespeed` (https://wavespeed.ai/models/minimax/h3/reference-to-video), **max 15s per call**. Because of that ceiling the orchestrator splits the ad into `ceil(duration_s / 15)` clips (at most 6): each clip gets its own slice of the frames, the same master prompt and its script segment. The clips are then concatenated into one MP4 with `ffmpeg -f concat` — if `ffmpeg` is unavailable the first clip is returned unstitched. Screenshots of the source web app can be captured via `agent-browser` and embedded as references.
+6. **Billing** — when a `workspace_id` is supplied the run reserves credits up front and refunds whatever it did not spend (see `app/services/credits.py`).
 
 ## Architecture (SOLID)
 - **S** — each module has one job (`config`, `protocols`, `*_client`, `orchestrator`, `routes`).
@@ -17,7 +18,7 @@ Minimal Python service that orchestrates AI to generate marketing video campaign
 - **D** — `Orchestrator` & routes depend on `Protocol`s; the container wires concretes.
 
 ## API
-- `POST /api/campaigns` — **SSE stream** of events: `plan | frame | script | video | done | error`.
+- `POST /api/campaigns` — **SSE stream** of events: `budget | plan | scene | screenshot | frame | script | video | done | error`.
 - `POST /api/campaigns/sync` — same, returned as JSON list.
 - `GET  /api/health` — health probe.
 - `GET /` — full SPA shell (dark-theme dashboard).
@@ -178,69 +179,3 @@ when the URL is received.
   - Tap the dark backdrop to close
   - Auto-closes when navigating between pages
 - **Touch-friendly tap targets** throughout (≥36×36px)
-
-## Stripe billing (credits)
-
-Credits are sold through **Stripe Checkout**. The integration talks to the
-Stripe REST API over plain `httpx` (no SDK) from `app/services/stripe.py`.
-
-### Configuration
-
-Two environment variables, both set in `.env` (which is gitignored):
-
-| Variable | Purpose |
-| --- | --- |
-| `STRIPE_RK_LIVE` | Global **restricted key** (`rk_live_…`). Sent as `Authorization: Bearer <key>` on every Stripe call. Server-side only. |
-| `STRIPE_WEBHOOK_SECRET` | Signing secret (`whsec_…`) used to verify that inbound webhooks really came from Stripe. |
-
-`.env.example` carries redacted placeholders (`rk_live_REPLACE_ME`,
-`whsec_REPLACE_ME`) to document the shape.
-
-> **The live key must NEVER be committed.** It belongs in `.env` only — never
-> in source, tests, logs, fixtures, or a PR description. `.gitignore` already
-> excludes `.env`; keep it that way. If a key is ever exposed, roll it
-> immediately in the Stripe dashboard. Error messages from the Stripe API are
-> passed through `stripe.redact()` before logging, because Stripe echoes the
-> presented key back in some `401` bodies.
-
-Importing `app/services/stripe.py` without `STRIPE_RK_LIVE` set raises a
-`RuntimeError` on purpose, so a misconfigured production deploy fails loudly
-instead of silently degrading. The router imports the module lazily inside
-each handler, so an unconfigured environment can still boot and serve the
-rest of the app.
-
-### Why the webhook secret matters
-
-The `/webhook` endpoint is a public, unauthenticated URL — anyone can POST to
-it. Without signature verification an attacker could forge a
-`checkout.session.completed` event and mint themselves free credits. Every
-request is therefore HMAC-SHA256 verified against the raw request body using
-`STRIPE_WEBHOOK_SECRET`, compared with `hmac.compare_digest`, and rejected
-with `400` on mismatch. Verification runs on the **raw** bytes — re-encoding
-the parsed JSON would change the payload and break the HMAC.
-
-### Endpoints
-
-- `POST /api/billing/stripe/checkout` — body `{workspace_id, credits, success_url, cancel_url}`.
-  Creates a Checkout Session and returns its URL. Pricing is
-  **1 credit = $0.01**, i.e. `cents = credits * 100`.
-- `POST /api/billing/stripe/webhook` — signed event sink. On
-  `checkout.session.completed` it calls
-  `storage.apply_credit_delta(workspace_id, delta=credits, reason='stripe')`.
-  The `workspace_id`/`credits` pair round-trips through the session metadata.
-- `GET  /api/billing/stripe/session/{session_id}` — session status.
-
-### Inspecting the key's permissions
-
-A restricted key only carries the grants selected in the dashboard. To see
-what it can do:
-
-```bash
-set -a && . ./.env && set +a
-curl -sS -H "Authorization: Bearer ${STRIPE_RK_LIVE}" \
-  https://api.stripe.com/v1/account -o docs/stripe-key-info.json
-```
-
-`docs/stripe-key-info.json` contains live account details and is gitignored —
-do not commit it. If the key lacks `customer.read`, `create_or_get_customer`
-degrades gracefully: the lookup 403s and it falls back to creating a customer.

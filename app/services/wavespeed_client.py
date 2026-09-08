@@ -1,21 +1,21 @@
 """Wavespeed CLI wrapper \u2014 minimal interface to video & image models.
 
 Targets the reference-to-video model
-(https://wavespeed.ai/models/alibaba/wan-3.0/reference-to-video). That model
-accepts up to 10 reference images and produces a coherent 2\u201330s clip with
-optional audio, which is exactly what a marketing ad needs.
+(https://wavespeed.ai/models/minimax/h3/reference-to-video). That model
+accepts up to 10 reference images and produces a coherent clip of at most
+15s with optional audio, which is exactly what a marketing ad needs.
 
 Two generation modes are exposed so the orchestrator (or any higher-level
 client SDK) can pick whichever fits the brief:
 
 * :meth:`WavespeedCLI.generate_video` \u2014 **single-scene** mode. One call to
   the CLI with every reference image (subjects, brand assets, screenshots)
-  passed in together. Cheap, coherent, but capped at 30s.
+  passed in together. Cheap, coherent, but capped at 15s.
 * :meth:`WavespeedCLI.generate_video_scenes` \u2014 **multi-scene** mode. Splits
   the requested total duration across up to ``settings.wavespeed_video_max_scenes``
   separate clips (3 by default), one per logical scene, and **stitches them
   together** with ffmpeg if available. This is how we cover 30-90s ads while
-  respecting the model's hard 30s-per-call ceiling.
+  respecting the model's hard 15s-per-call ceiling.
 
 Either mode can include web-app screenshots captured by the local
 ``agent-browser`` CLI \u2014 :meth:`capture_screenshot` uploads the local file
@@ -57,9 +57,9 @@ class ScenePlan:
     """Result of :meth:`WavespeedCLI.decide_scenes`.
 
     ``multi_scene`` is True iff the brief should be split into multiple clips
-    (e.g. \u226530s total duration or the AI explicitly chose scenes). The
-    ``clips`` list always contains at least one entry; ``total_duration_s`` is
-    the sum of every clip duration.
+    (e.g. a total duration above the per-call cap or the AI explicitly chose
+    scenes). The ``clips`` list always contains at least one entry;
+    ``total_duration_s`` is the sum of every clip duration.
     """
     multi_scene: bool
     clips: list[SceneClip]

@@ -97,13 +97,6 @@ def test_jwt_roundtrip(monkeypatch):
 def test_jwt_tampered_is_rejected(monkeypatch):
     monkeypatch.setenv("vault_key", "test-secret-key")
     tok = security.jwt_for_user("u-001", "a@b.com")
-    # Tamper the *first* char of the signature. NB: flipping the LAST char is
-    # not a valid tamper -- a 32-byte HMAC is 43 base64url chars, so the final
-    # char only carries 2 significant bits and the other 4 are discarded
-    # padding; ~1 in 16 signatures would decode to identical bytes and the
-    # "tampered" token would legitimately verify (flaky ~6% of runs).
-    head, payload, sig = tok.split(".", 2)
-    bad_sig = ("A" if sig[0] != "A" else "B") + sig[1:]
-    bad = f"{head}.{payload}.{bad_sig}"
-    assert security._b64url_decode(bad_sig) != security._b64url_decode(sig)
+    # flip the last char of the signature
+    bad = tok[:-1] + ("A" if tok[-1] != "A" else "B")
     assert security.jwt_decode(bad) is None

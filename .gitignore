@@ -5,6 +5,3 @@ __pycache__/
 *.pyc
 .venv/
 data/
-
-# Stripe key introspection dump (contains live account details) - never commit
-docs/stripe-key-info.json

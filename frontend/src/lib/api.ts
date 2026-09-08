@@ -22,7 +22,7 @@ export async function* streamCampaign(body: StreamCampaignBody): AsyncGenerator<
 
   const r = await fetch(`${apiBase}/api/campaigns`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(payload),
   });
   if (!r.ok || !r.body) {
@@ -48,15 +48,75 @@ export async function* streamCampaign(body: StreamCampaignBody): AsyncGenerator<
   }
 }
 
+/**
+ * Fetch the caller's campaign history.
+ *
+ * Returns `null` (rather than throwing or returning `[]`) when the request
+ * fails or the caller isn't authorised, so pages can distinguish "backend
+ * unavailable, keep showing what we have" from "you genuinely have zero
+ * campaigns". `authHeaders()` is hoisted from below.
+ */
 export async function getHistory(): Promise<any[] | null> {
   try {
-    const r = await fetch(`${apiBase}/api/campaigns/history`);
+    const r = await fetch(`${apiBase}/api/campaigns/history`, {
+      headers: authHeaders(),
+    });
     if (r.ok) {
       const j = await r.json();
       if (Array.isArray(j.campaigns)) return j.campaigns;
     }
   } catch {}
   return null;
+}
+
+export interface CampaignDetailPlan {
+  plan: {
+    hook?: string; tagline?: string; cta?: string;
+    audience?: string; tone?: string;
+  } | null;
+  script: string;
+  frames: string[];
+  screenshots: string[];
+  video_url: string | null;
+  scenes: string[];
+  multi_scene: boolean;
+}
+
+export interface CampaignAsset {
+  id: number | null;
+  kind: string;
+  url: string;
+  duration_s: number | null;
+  metadata: Record<string, any>;
+  created_at: number;
+}
+
+export interface CampaignDetail {
+  campaign: any;
+  plan: CampaignDetailPlan;
+  assets: CampaignAsset[];
+}
+
+/** Thrown by `getCampaign` so callers can branch on 403 vs 404. */
+export class ApiError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+    this.name = 'ApiError';
+  }
+}
+
+/** GET /api/campaigns/{id} -> `{campaign, plan, assets}`. */
+export async function getCampaign(id: string): Promise<CampaignDetail> {
+  const r = await fetch(`${apiBase}/api/campaigns/${encodeURIComponent(id)}`, {
+    headers: authHeaders(),
+  });
+  if (!r.ok) {
+    const detail = await r.text().catch(() => '');
+    throw new ApiError(r.status, detail || `HTTP ${r.status}`);
+  }
+  return r.json();
 }
 
 export async function getHealth(): Promise<{ ok: boolean }> {
@@ -234,5 +294,87 @@ export async function adminGetAclMatrix(): Promise<AdminAclMatrix> {
 export async function adminListRoutes(): Promise<AdminAclMatrix['routes']> {
   const r = await fetch(`${apiBase}/api/admin/routes`, { headers: authHeaders() });
   if (!r.ok) throw new Error(`list routes failed: ${r.status}`);
+  return r.json();
+}
+
+
+// ─── Billing ────────────────────────────────────────────────────────────────
+// All amounts are in credits. Use lib/credits.ts to render dollars.
+
+export interface BillingPlan {
+  name: string;
+  tagline: string;
+  monthly_credits: number;
+  price_usd: number;
+  /** Marginal credits per second of video — used for the max-duration hint. */
+  cost_per_sec: number;
+}
+
+export interface BillingBalance {
+  workspace_id: string;
+  balance_credits: number;
+}
+
+export interface CampaignEstimate {
+  duration_s: number;
+  n_frames: number;
+  credits: number;
+  usd: number;
+  credit_usd: number;
+}
+
+export interface CheckoutResult {
+  ok: boolean;
+  workspace_id: string;
+  plan_name: string;
+  monthly_credits: number;
+  since: number;
+}
+
+export async function fetchPlans(): Promise<BillingPlan[]> {
+  const r = await fetch(`${apiBase}/api/billing/plans`, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`fetch plans failed: ${r.status}`);
+  return r.json();
+}
+
+/** Omit `workspaceId` to get the caller's own workspace balance. */
+export async function fetchBalance(workspaceId?: string): Promise<BillingBalance> {
+  const qs = workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : '';
+  const r = await fetch(`${apiBase}/api/billing/balance${qs}`, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`fetch balance failed: ${r.status}`);
+  return r.json();
+}
+
+export interface MyWorkspace {
+  workspace_id: string;
+  plan_name: string | null;
+  balance_credits: number;
+}
+
+/** Bootstrap: which workspace am I, what plan am I on, what's my balance. */
+export async function fetchMyWorkspace(): Promise<MyWorkspace> {
+  const r = await fetch(`${apiBase}/api/billing/workspace`, { headers: authHeaders() });
+  if (!r.ok) throw new Error(`fetch workspace failed: ${r.status}`);
+  return r.json();
+}
+
+export async function checkoutPlan(workspaceId: string, planName: string): Promise<CheckoutResult> {
+  const r = await fetch(`${apiBase}/api/billing/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify({ workspace_id: workspaceId, plan_name: planName }),
+  });
+  if (!r.ok) {
+    const txt = await r.text().catch(() => '');
+    throw new Error(`checkout failed: ${r.status} ${txt}`);
+  }
+  return r.json();
+}
+
+export async function fetchEstimate(durationS: number): Promise<CampaignEstimate> {
+  const r = await fetch(`${apiBase}/api/campaigns/estimate?duration_s=${durationS}`, {
+    headers: authHeaders(),
+  });
+  if (!r.ok) throw new Error(`fetch estimate failed: ${r.status}`);
   return r.json();
 }
