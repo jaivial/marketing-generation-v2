@@ -1,0 +1,253 @@
+{
+  "id": "acct_1Se15Z1KIhEvHGIu",
+  "object": "account",
+  "business_profile": {
+    "annual_revenue": null,
+    "estimated_worker_count": null,
+    "mcc": "5734",
+    "minority_owned_business_designation": null,
+    "name": null,
+    "product_description": "MenuStudio AI es una plataforma SaaS de generación de imágenes gastronómicas con inteligencia artificial.\n\n  Funcionalidades principales:\n\n  - Generación de imágenes: Crea fotografías profesionales de comida a partir de descripciones de texto usando IA (WaveSpeed API)\n  - Edición de imágenes: Modifica imágenes existentes con herramientas de IA\n  - Generación de videos: Convierte imágenes en contenido de video\n  - Sistema de créditos: Los usuarios compran créditos para generar contenido, integrado con Stripe\n  - SEO programático: Páginas públicas optimizadas organizadas por cocina, categoría y estilo visual\n  - Galería pública: Comparte y descubre imágenes generadas por la comunidad\n\n  Stack tecnológico:\n\n  - Frontend: React + Vite + TypeScript + Jotai + Tailwind CSS\n  - Backend: Elysia.js (Bun)\n  - Base de datos: MySQL + Prisma\n  - Actualizaciones en tiempo real vía WebSocket\n\n  Ideal para: restaurantes, bloggers gastronómicos y negocios culinarios que buscan fotografía profesional sin costosas sesiones fotográficas.",
+    "support_address": null,
+    "support_email": null,
+    "support_phone": "+34692747052",
+    "support_url": null,
+    "url": "https://www.menustudioai.com"
+  },
+  "business_type": "individual",
+  "capabilities": {
+    "amazon_pay_payments": "active",
+    "bancontact_payments": "active",
+    "blik_payments": "active",
+    "card_payments": "active",
+    "cartes_bancaires_payments": "pending",
+    "eps_payments": "active",
+    "kakao_pay_payments": "active",
+    "klarna_payments": "active",
+    "link_payments": "active",
+    "naver_pay_payments": "active",
+    "payco_payments": "active",
+    "revolut_pay_payments": "active",
+    "samsung_pay_payments": "active",
+    "transfers": "active"
+  },
+  "charges_enabled": true,
+  "company": {
+    "address": {
+      "city": "Sedaví",
+      "country": "ES",
+      "line1": "Carrer Del Pintor Sorolla 54",
+      "line2": "Puerta 17",
+      "postal_code": "46910",
+      "state": "V"
+    },
+    "directors_provided": false,
+    "executives_provided": false,
+    "name": null,
+    "owners_provided": false,
+    "phone": "+34692747052",
+    "tax_id_provided": false,
+    "verification": {
+      "document": {
+        "back": null,
+        "details": null,
+        "details_code": null,
+        "front": null
+      }
+    }
+  },
+  "controller": {
+    "type": "account"
+  },
+  "country": "ES",
+  "created": 1765664097,
+  "default_currency": "eur",
+  "details_submitted": true,
+  "email": "jaimebillanueba99@gmail.com",
+  "external_accounts": {
+    "object": "list",
+    "data": [
+      {
+        "id": "ba_1SjIDo1KIhEvHGIuGM8C8XC3",
+        "object": "bank_account",
+        "account": "acct_1Se15Z1KIhEvHGIu",
+        "account_holder_name": null,
+        "account_holder_type": null,
+        "account_type": null,
+        "available_payout_methods": [
+          "standard"
+        ],
+        "bank_name": "BANCO BILBAO VIZCAYA ARGENTARIA S.A.",
+        "country": "ES",
+        "currency": "eur",
+        "default_for_currency": true,
+        "fingerprint": "X5IvrZAgPHlgQUjg",
+        "future_requirements": {
+          "currently_due": [],
+          "errors": [],
+          "past_due": [],
+          "pending_verification": []
+        },
+        "last4": "4038",
+        "metadata": {},
+        "requirements": {
+          "currently_due": [],
+          "errors": [],
+          "past_due": [],
+          "pending_verification": []
+        },
+        "routing_number": "BBVAESMM",
+        "status": "new"
+      }
+    ],
+    "has_more": false,
+    "total_count": 1,
+    "url": "/v1/accounts/acct_1Se15Z1KIhEvHGIu/external_accounts"
+  },
+  "future_requirements": {
+    "alternatives": [],
+    "current_deadline": null,
+    "currently_due": [],
+    "disabled_reason": null,
+    "errors": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": []
+  },
+  "individual": {
+    "id": "person_1SjI6N1KIhEvHGIumlyKubtP",
+    "object": "person",
+    "account": "acct_1Se15Z1KIhEvHGIu",
+    "address": {
+      "city": "Sedaví",
+      "country": "ES",
+      "line1": "Carrer Del Pintor Sorolla 54",
+      "line2": "Puerta 17",
+      "postal_code": "46910",
+      "state": "V"
+    },
+    "created": 1766921136,
+    "dob": {
+      "day": 2,
+      "month": 4,
+      "year": 1997
+    },
+    "email": "jaimebillanueba99@gmail.com",
+    "first_name": "Jaime",
+    "future_requirements": {
+      "alternatives": [],
+      "currently_due": [],
+      "errors": [],
+      "eventually_due": [],
+      "past_due": [],
+      "pending_verification": []
+    },
+    "id_number_provided": true,
+    "last_name": "Villanueva Alcon",
+    "metadata": {},
+    "nationality": "ES",
+    "phone": "+34692747052",
+    "relationship": {
+      "authorizer": false,
+      "director": false,
+      "executive": false,
+      "legal_guardian": false,
+      "owner": false,
+      "percent_ownership": null,
+      "representative": true,
+      "title": null
+    },
+    "requirements": {
+      "alternatives": [],
+      "currently_due": [],
+      "errors": [],
+      "eventually_due": [],
+      "past_due": [],
+      "pending_verification": []
+    },
+    "ssn_last_4_provided": true,
+    "verification": {
+      "additional_document": {
+        "back": null,
+        "details": null,
+        "details_code": null,
+        "front": null
+      },
+      "details": null,
+      "details_code": null,
+      "document": {
+        "back": null,
+        "details": null,
+        "details_code": null,
+        "front": null
+      },
+      "status": "verified"
+    }
+  },
+  "payouts_enabled": true,
+  "requirements": {
+    "alternatives": [],
+    "current_deadline": null,
+    "currently_due": [],
+    "disabled_reason": null,
+    "errors": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": []
+  },
+  "settings": {
+    "bacs_debit_payments": {
+      "display_name": null,
+      "service_user_number": null
+    },
+    "branding": {
+      "icon": null,
+      "logo": null,
+      "primary_color": null,
+      "secondary_color": null
+    },
+    "card_issuing": {
+      "tos_acceptance": {
+        "date": null,
+        "ip": null
+      }
+    },
+    "card_payments": {
+      "decline_on": {
+        "avs_failure": false,
+        "cvc_failure": false
+      },
+      "statement_descriptor_prefix": "MENUSTUDIO",
+      "statement_descriptor_prefix_kana": null,
+      "statement_descriptor_prefix_kanji": null
+    },
+    "dashboard": {
+      "display_name": "Menustudioai",
+      "timezone": "America/New_York"
+    },
+    "invoices": {
+      "default_account_tax_ids": null,
+      "hosted_payment_method_save": "offer"
+    },
+    "payments": {
+      "statement_descriptor": "MENUSTUDIO AI",
+      "statement_descriptor_kana": null,
+      "statement_descriptor_kanji": null
+    },
+    "payouts": {
+      "debit_negative_balances": true,
+      "schedule": {
+        "delay_days": 3,
+        "interval": "manual"
+      },
+      "statement_descriptor": null
+    },
+    "sepa_debit_payments": {}
+  },
+  "tos_acceptance": {
+    "date": 1766921702,
+    "ip": "84.121.164.242",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+  },
+  "type": "standard"
+}
