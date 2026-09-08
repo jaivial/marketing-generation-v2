@@ -1,5 +1,4 @@
 import React, { useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useStore } from '../lib/store';
 import TopBar from '../components/TopBar';
 
@@ -7,7 +6,6 @@ const MONTHS = ['J','F','M','A','M','J','J','A','S','O','N','D'];
 
 const Analytics: React.FC = () => {
   const { history } = useStore();
-  const { t } = useTranslation();
   const items = history;
   const done = items.filter(i => i.status === 'done');
   const totalFrames = done.reduce((acc, i) => acc + Math.max(2, Math.ceil(i.duration_s/2)), 0);
@@ -22,16 +20,16 @@ const Analytics: React.FC = () => {
   const topStyles = Object.entries(stylesCount).sort((a, b) => b[1] - a[1]);
 
   const kpis = [
-    { label: t('analytics.kpi.completed'),   value: done.length,       delta: '+12%' },
-    { label: t('analytics.kpi.frames'),      value: totalFrames,       delta: '+24%' },
-    { label: t('analytics.kpi.totalVideo'),  value: totalDuration,     delta: '+8%' },
-    { label: t('analytics.kpi.successRate'), value: successRate + '%', delta: '+3%' },
+    { label: 'Campaigns completed', value: done.length, delta: '+12%' },
+    { label: 'Frames generated',     value: totalFrames,  delta: '+24%' },
+    { label: 'Total video (s)',      value: totalDuration, delta: '+8%' },
+    { label: 'Success rate',         value: successRate + '%', delta: '+3%' },
   ];
 
   return (
     <>
-      <TopBar title={t('analytics.title')} />
-      <p className="text-xs sm:text-sm text-zinc-400 -mt-4 sm:-mt-6 mb-4 sm:mb-6">{t('analytics.subtitle')}</p>
+      <TopBar title="Analytics" />
+      <p className="text-xs sm:text-sm text-zinc-400 -mt-4 sm:-mt-6 mb-4 sm:mb-6">Performance and usage at a glance.</p>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
         {kpis.map(k => (
@@ -46,10 +44,10 @@ const Analytics: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         <div className="lg:col-span-2 bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-            <h3 className="font-semibold text-sm sm:text-base">{t('analytics.chart.title')}</h3>
+            <h3 className="font-semibold text-sm sm:text-base">Frames generated (last 12 months)</h3>
             <div className="flex gap-2 text-xs">
-              <button className="btn btn-secondary text-xs py-1">{t('analytics.chart.monthly')}</button>
-              <button className="btn btn-ghost text-xs py-1">{t('analytics.chart.weekly')}</button>
+              <button className="btn btn-secondary text-xs py-1">Monthly</button>
+              <button className="btn btn-ghost text-xs py-1">Weekly</button>
             </div>
           </div>
           <div className="flex items-end gap-1.5 sm:gap-2 h-32 sm:h-40">
@@ -63,9 +61,9 @@ const Analytics: React.FC = () => {
         </div>
 
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-4 sm:p-6">
-          <h3 className="font-semibold text-sm sm:text-base mb-3 sm:mb-4">{t('analytics.topStyles.title')}</h3>
+          <h3 className="font-semibold text-sm sm:text-base mb-3 sm:mb-4">Top styles</h3>
           {topStyles.length === 0 ? (
-            <p className="text-sm text-zinc-500">{t('analytics.topStyles.empty')}</p>
+            <p className="text-sm text-zinc-500">No data yet.</p>
           ) : (
             <div className="space-y-3">
               {topStyles.map(([style, count]) => {
@@ -75,7 +73,7 @@ const Analytics: React.FC = () => {
                   <div key={style}>
                     <div className="flex justify-between text-xs sm:text-sm mb-1">
                       <span className="capitalize text-zinc-300 truncate">{style}</span>
-                      <span className="text-zinc-500 flex-shrink-0 ml-2">{t('analytics.topStyles.campaigns', { count })}</span>
+                      <span className="text-zinc-500 flex-shrink-0 ml-2">{count} campaigns</span>
                     </div>
                     <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full gradient-bg" style={{ width: `${pct}%` }} />

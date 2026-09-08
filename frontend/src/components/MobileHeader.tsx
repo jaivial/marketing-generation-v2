@@ -3,52 +3,39 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
 import { Link } from 'react-router-dom';
-import { useTranslation } from 'react-i18next';
 import { Logo, Icon } from './ui';
-import LanguageSwitcher from './LanguageSwitcher';
 import { useStore } from '../lib/store';
-
-export interface Crumb {
-  /** i18n key for the crumb label. */
-  labelKey: string;
-  href?: string;
-}
 
 interface Props {
   title: string;
-  breadcrumb?: Crumb[];
+  breadcrumb?: { label: string; href?: string }[];
 }
 
-// Route → i18n key. The caller translates; keeping keys here means the map
-// stays a pure, testable data structure.
-const PAGE_TITLE_KEYS: Record<string, string> = {
-  '/': 'nav.dashboard',
-  '/dashboard': 'nav.dashboard',
-  '/new': 'nav.newCampaign',
-  '/campaigns': 'nav.campaigns',
-  '/library': 'nav.library',
-  '/integrations': 'nav.integrations',
-  '/analytics': 'nav.analytics',
-  '/settings': 'nav.settings',
-  '/pricing': 'nav.pricing',
+const PAGE_TITLES: Record<string, string> = {
+  '/': 'Dashboard',
+  '/dashboard': 'Dashboard',
+  '/new': 'New campaign',
+  '/campaigns': 'Campaigns',
+  '/library': 'Library',
+  '/integrations': 'Integrations',
+  '/analytics': 'Analytics',
+  '/settings': 'Settings',
+  '/pricing': 'Pricing',
 };
 
-/** Return the i18n key for a route's page title. */
-export function deriveTitleKey(path: string): string {
-  if (path.startsWith('/campaigns/')) return 'nav.campaign';
-  return PAGE_TITLE_KEYS[path] || 'common.appName';
+export function deriveTitle(path: string): string {
+  if (path.startsWith('/campaigns/')) return 'Campaign';
+  return PAGE_TITLES[path] || 'MarketingForge';
 }
 
-/** Return the breadcrumb trail (as i18n keys) for a route. */
-export function deriveBreadcrumbKeys(path: string): Crumb[] | null {
+export function deriveBreadcrumb(path: string): { label: string; href?: string }[] | null {
   if (['/', '/dashboard', '/campaigns'].includes(path)) return null;
-  if (path === '/new') return [{ labelKey: 'nav.campaigns', href: '/campaigns' }, { labelKey: 'nav.new' }];
-  if (path.startsWith('/campaigns/')) return [{ labelKey: 'nav.campaigns', href: '/campaigns' }, { labelKey: 'nav.detail' }];
+  if (path === '/new') return [{ label: 'Campaigns', href: '/campaigns' }, { label: 'New' }];
+  if (path.startsWith('/campaigns/')) return [{ label: 'Campaigns', href: '/campaigns' }, { label: 'Detail' }];
   return null;
 }
 
 const MobileHeader: React.FC<Props> = ({ title, breadcrumb }) => {
-  const { t } = useTranslation();
   const { setDrawerOpen } = useStore();
 
   return (
@@ -57,7 +44,7 @@ const MobileHeader: React.FC<Props> = ({ title, breadcrumb }) => {
       <button
         onClick={() => setDrawerOpen(true)}
         className="w-9 h-9 rounded-lg flex items-center justify-center text-zinc-300 hover:text-white hover:bg-zinc-900 flex-shrink-0"
-        aria-label={t('nav.openMenu')}
+        aria-label="Open navigation menu"
       >
         <Icon name="menu" size={20} strokeWidth={2} />
       </button>
@@ -67,16 +54,13 @@ const MobileHeader: React.FC<Props> = ({ title, breadcrumb }) => {
             {breadcrumb.map((b, i) => (
               <span key={i}>
                 {i > 0 && <span className="mx-0.5">/</span>}
-                {b.href
-                  ? <Link to={b.href} className="hover:text-zinc-300">{t(b.labelKey)}</Link>
-                  : t(b.labelKey)}
+                {b.href ? <Link to={b.href} className="hover:text-zinc-300">{b.label}</Link> : b.label}
               </span>
             ))}
           </div>
         )}
         <p className="text-sm font-semibold truncate leading-tight">{title}</p>
       </div>
-      <LanguageSwitcher className="!px-1.5 !py-1 max-w-[5.5rem]" />
       <Logo compact />
     </header>
   );

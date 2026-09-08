@@ -31,6 +31,7 @@ from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.admin_vault import router as admin_vault_router
 from app.api.translations import router as i18n_router
+from app.api.onboarding import router as onboarding_router
 from app.core.acl import (
     Principal,
     Role,
@@ -124,7 +125,7 @@ app.include_router(public_router, prefix="/api")
 app.include_router(admin_router, prefix="/api/admin")
 app.include_router(auth_router, prefix="/api")
 app.include_router(admin_vault_router, prefix="/api/admin")
-# i18n bundles are public: the SPA needs them before the user authenticates.
+app.include_router(onboarding_router, prefix="/api")
 app.include_router(i18n_router)
 
 
