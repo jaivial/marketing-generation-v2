@@ -1,0 +1,50 @@
+# --- VCS metadata ---
+.git
+.gitignore
+.gitattributes
+.github
+
+# --- Virtualenvs ---
+.venv
+venv
+env
+
+# --- Secrets / local config (keep the example template) ---
+.env
+.env.*
+!.env.example
+
+# --- Python build/test caches ---
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+
+# --- Runtime-generated state (bind mounts / SQLite) ---
+output
+data
+
+# --- Frontend deps and build output ---
+frontend/node_modules
+frontend/dist
+static/dist
+
+# --- Dev-only trees ---
+tests
+mockups
+docs
+
+# --- Editor / OS noise ---
+.vscode
+.idea
+.DS_Store
+
+# --- Docs / logs ---
+README.md
+*.md
+*.log
+
+# --- Agent runtime dirs ---
+.claude
+.pi
+.opencode
