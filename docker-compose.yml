@@ -1,12 +1,29 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      # Build the image with the host user's uid/gid so the bind-mounted
+      # ./output directory is writable by the container. Override at run time:
+      #     HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose up --build
+      # If unset, the Dockerfile defaults (uid 1000 / gid 1000) apply.
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
     # Host port 8000 is already in use on this box (deepseek-web-bridge binds
     # 127.0.0.1:8000). Map the container's 8000 to host 9105 instead, which is
     # the port nginx already proxies to via the systemd unit as a fallback and
     # matches what the public URL resolves to through Cloudflare.
     ports: ["9105:8000"]
+    # Run the container as the same uid:gid as the host user so bind-mounted
+    # files are owned by a real user on the host. Without this the image's
+    # USER app directive is overridden at runtime.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     env_file: .env
+    # The .env on the host uses the host absolute path; inside the container the
+    # bind mount is at /app/output. Override so generated files land inside the
+    # bind-mounted volume regardless of what .env says.
+    environment:
+      OUTPUT_DIR: /app/output
     volumes:
       - ./output:/app/output
     restart: unless-stopped
