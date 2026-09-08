@@ -1,0 +1,30 @@
+# ci.yml -- observational point: ci.pipeline.run
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test: # coordination id: ci.job.test
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout # obs: ci.step.checkout
+        uses: actions/checkout@v4
+
+      - name: setup-python # obs: ci.step.setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: install deps # obs: ci.step.install
+        run: pip install -r requirements.txt
+
+      - name: pytest # obs: ci.step.pytest
+        run: pytest tests/ -q
