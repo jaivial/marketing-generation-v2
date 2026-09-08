@@ -1,7 +1,11 @@
 services:
   app:
     build: .
-    ports: ["8000:8000"]
+    # Host port 8000 is already in use on this box (deepseek-web-bridge binds
+    # 127.0.0.1:8000). Map the container's 8000 to host 9105 instead, which is
+    # the port nginx already proxies to via the systemd unit as a fallback and
+    # matches what the public URL resolves to through Cloudflare.
+    ports: ["9105:8000"]
     env_file: .env
     volumes:
       - ./output:/app/output
