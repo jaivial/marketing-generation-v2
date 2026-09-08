@@ -153,6 +153,19 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+# ─── SEO endpoints (must be declared BEFORE the SPA catch-all) ───────────────
+@app.get("/robots.txt", include_in_schema=False)
+async def robots_txt():
+    """Serve the real robots.txt, not the SPA shell."""
+    return FileResponse(STATIC_DIR / "robots.txt", media_type="text/plain")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+async def sitemap_xml():
+    """Serve the real sitemap.xml, not the SPA shell."""
+    return FileResponse(STATIC_DIR / "sitemap.xml", media_type="application/xml")
+
+
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa_fallback(full_path: str):
     if full_path.startswith("api/") or full_path.startswith("assets/") or full_path.startswith("static/"):

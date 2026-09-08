@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard
+Disallow: /new
+Disallow: /campaigns
+Disallow: /library
+Disallow: /integrations
+Disallow: /analytics
+Disallow: /settings
+
+Sitemap: https://marketing-generation.menustudioai.com/sitemap.xml

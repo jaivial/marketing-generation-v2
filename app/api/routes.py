@@ -44,8 +44,46 @@ router.include_router(billing_campaigns_router)
 # \u2500\u2500\u2500 Public \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 @router.get("/health")
 def health(_: Principal = Depends(get_current_principal)) -> dict:
-    """Public health check \u2014 returns 200 for anyone."""
-    return {"ok": True}
+    """Public health check \u2014 returns 200 for anyone.
+
+    Probes the configured dependencies so a misconfigured deploy fails loud
+    instead of returning 200-with-broken-pipeline. The body is informational;
+    the status code is still 200 unless the process is genuinely unable to
+    serve HTTP at all.
+    """
+    import os
+    from app.core.db import get_db
+
+    checks: dict[str, object] = {
+        "minimax_api_key_set": bool(os.getenv("MINIMAX_API_KEY", "")),
+        "wavespeed_api_key_set": bool(os.getenv("WAVESPEED_API_KEY", "")),
+        "output_dir_writable": False,
+        "database_reachable": False,
+    }
+
+    try:
+        out_dir = pathlib.Path(os.getenv("OUTPUT_DIR", "/home/jaime/marketing-generation/output"))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        probe = out_dir / ".health_probe"
+        probe.write_text("ok")
+        probe.unlink()
+        checks["output_dir_writable"] = True
+    except OSError:
+        pass
+
+    try:
+        with get_db().connection() as conn:
+            conn.execute("SELECT 1").fetchone()
+        checks["database_reachable"] = True
+    except Exception:
+        pass
+
+    ok = all(v is True for v in checks.values())
+    return {
+        "ok": ok,
+        "service": "marketing-generation",
+        "checks": checks,
+    }
 
 
 @router.get("/auth/whoami")

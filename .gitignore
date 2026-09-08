@@ -1,7 +1,38 @@
-.venv/
-.env
-data/
+# ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+
+# ── Virtualenv ────────────────────────────────────────────────────────────────
 .venv/
+venv/
+env/
+
+# ── Secrets / local config ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Runtime / generated data ─────────────────────────────────────────────────
 data/
+output/
+*.log
+
+# ── Frontend (built artifacts and deps) ──────────────────────────────────────
+frontend/node_modules/
+frontend/dist/
+static/dist/
+
+# ── Ops dumps that must never be committed ────────────────────────────────────
+# Stripe account dumps, incident reports, and similar secrets go here, never in
+# the repo. Use a private bucket / 1Password / Vault for the real values.
+docs/stripe-*.json
+docs/secrets/
+docs/incidents/
+
+# ── IDE / OS ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
