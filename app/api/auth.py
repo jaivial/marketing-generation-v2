@@ -6,6 +6,7 @@ personal workspace created at registration time; the email vault (if
 any) lives in that workspace.
 """
 from __future__ import annotations
+import logging
 import os
 import time
 
@@ -13,13 +14,17 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.security import hash_password, jwt_for_user, verify_password
 from app.models.auth import (
-    ConfirmIn, ConfirmOtpIn, LoginIn, OtpOut, RegisterIn, ResendOtpIn,
+    ConfirmIn, ConfirmOtpIn, ForgotPasswordIn, ForgotPasswordOut, LoginIn,
+    OtpOut, RegisterIn, ResetPasswordIn, ResetPasswordOut, ResendOtpIn,
     TokenOut, UserOut, WhoAmIOut,
 )
 from app.services import storage
-from app.services.emailer import send_confirmation_otp
+from app.services.emailer import (
+    password_reset_link, send_confirmation_otp, send_password_reset_email,
+)
 
 
+log = logging.getLogger("marketing.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
@@ -119,6 +124,43 @@ def resend_otp(payload: ResendOtpIn):
         name=user.get("name"), workspace_id=ws["id"] if ws else None,
     )
     return OtpOut(sent=sent, expires_in=storage.OTP_TTL_SECONDS)
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordOut)
+def forgot_password(payload: ForgotPasswordIn):
+    """Mail a one-time reset link (obs: auth.reset.request, coord: auth.reset.flow).
+
+    The answer never depends on whether the address exists, so the endpoint
+    cannot be used to enumerate accounts. Rate limited to one mail per
+    minute per address.
+    """
+    user = storage.get_user_by_email(payload.email)
+    if user is not None:
+        last = user.get("last_password_reset_at")
+        if last and (time.time() - float(last)) < storage.PASSWORD_RESET_COOLDOWN_SECONDS:
+            raise HTTPException(429, "please wait before requesting another reset link")
+        fresh = storage.request_password_reset(payload.email)
+        if fresh is not None:  # raced away between the two reads: stay silent
+            ws = storage.get_workspace_by_owner(fresh["id"])
+            sent = send_password_reset_email(
+                to=fresh["email"], link=password_reset_link(fresh["reset_token"]),
+                name=fresh.get("name"), workspace_id=ws["id"] if ws else None,
+            )
+            log.info("auth.reset.requested user=%s sent=%s", fresh["id"], sent)
+    return ForgotPasswordOut()
+
+
+@router.post("/reset-password", response_model=ResetPasswordOut)
+def reset_password(payload: ResetPasswordIn):
+    """Consume a reset token and set the new password (coord: auth.reset.consume)."""
+    updated = storage.consume_password_reset(
+        payload.token, hash_password(payload.new_password),
+    )
+    if updated is None:
+        log.warning("auth.reset.rejected")
+        raise HTTPException(400, "invalid or expired reset link")
+    log.info("auth.reset.completed user=%s", updated["id"])
+    return ResetPasswordOut()
 
 
 @router.post("/login", response_model=TokenOut)

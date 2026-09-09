@@ -17,6 +17,7 @@ Two entry points are exposed:
 """
 from __future__ import annotations
 import logging
+import os
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -100,6 +101,53 @@ def send_confirmation_otp(*, to: str, otp: str, name: str | None = None,
         log.info(
             "emailer: stub-send to=%s subject=%s otp=%s (no SMTP vault configured)",
             to, subject, otp,
+        )
+        return True
+    return _send_via_gmail(
+        sender_email=creds[0], app_password=creds[1],
+        to=to, subject=subject, html=html, text=text, workspace_id=workspace_id,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Password reset (obs: emailer.password_reset, coord: auth.reset.mail)
+# ---------------------------------------------------------------------------
+# Public origin the reset link points at; overridable per deployment.
+DEFAULT_PUBLIC_BASE_URL = "https://marketing-generation.menustudioai.com"
+RESET_LINK_TTL_MINUTES = 30
+
+
+def public_base_url() -> str:
+    """Origin absolute links are built from (obs: emailer.public_base_url)."""
+    return os.getenv("PUBLIC_BASE_URL", DEFAULT_PUBLIC_BASE_URL).rstrip("/")
+
+
+def password_reset_link(token: str) -> str:
+    """Full ``/reset-password`` URL carrying the single-use token."""
+    return f"{public_base_url()}/reset-password?token={token}"
+
+
+def send_password_reset_email(*, to: str, link: str, name: str | None = None,
+                              workspace_id: str | None = None) -> bool:
+    """Send (or log) the one-time password reset link (coord: auth.reset.mail)."""
+    subject = "Reset your MarketingForge password"
+    html = (
+        f"<p>Hi {name or ''},</p>"
+        f"<p>We received a request to reset your MarketingForge password.</p>"
+        f"<p><a data-testid=\"email-reset-link\" href=\"{link}\">{link}</a></p>"
+        f"<p>This link works once and expires in {RESET_LINK_TTL_MINUTES} minutes.</p>"
+    )
+    text = (
+        f"Hi {name or ''},\n\n"
+        f"Reset your MarketingForge password: {link}\n"
+        f"This link works once and expires in {RESET_LINK_TTL_MINUTES} minutes.\n"
+    )
+
+    creds = _resolve_credentials(workspace_id)
+    if not creds:
+        log.info(
+            "emailer: stub-send to=%s subject=%s link=%s (no SMTP vault configured)",
+            to, subject, link,
         )
         return True
     return _send_via_gmail(
