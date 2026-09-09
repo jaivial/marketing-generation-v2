@@ -7,15 +7,17 @@ any) lives in that workspace.
 """
 from __future__ import annotations
 import os
+import time
 
 from fastapi import APIRouter, HTTPException
 
 from app.core.security import hash_password, jwt_for_user, verify_password
 from app.models.auth import (
-    ConfirmIn, LoginIn, RegisterIn, TokenOut, UserOut, WhoAmIOut,
+    ConfirmIn, ConfirmOtpIn, LoginIn, OtpOut, RegisterIn, ResendOtpIn,
+    TokenOut, UserOut, WhoAmIOut,
 )
 from app.services import storage
-from app.services.emailer import send_confirmation_email
+from app.services.emailer import send_confirmation_otp
 
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -35,7 +37,7 @@ def _make_token(user: dict) -> TokenOut:
 
 @router.post("/register", response_model=TokenOut, status_code=201)
 def register(payload: RegisterIn):
-    """Create a new user + personal workspace, mail a confirmation link."""
+    """Create a user + workspace and mail the 6-digit confirmation code."""
     existing = storage.get_user_by_email(payload.email)
     if existing is not None:
         raise HTTPException(409, "email already registered")
@@ -47,8 +49,8 @@ def register(payload: RegisterIn):
     workspace = storage.create_workspace(
         owner_id=user["id"], name=payload.name or user["email"],
     )
-    send_confirmation_email(
-        to=user["email"], token=user["confirm_token"],
+    send_confirmation_otp(
+        to=user["email"], otp=user["confirm_otp"],
         name=user.get("name"), workspace_id=workspace["id"],
     )
     out = _make_token(user)
@@ -57,9 +59,29 @@ def register(payload: RegisterIn):
     return out
 
 
+def _confirmed_token_out(user: dict) -> TokenOut:
+    out = _make_token(user)
+    out.user.email_confirmed = True
+    return out
+
+
 @router.post("/confirm", response_model=TokenOut)
 def confirm_email(payload: ConfirmIn):
-    """Confirm an email address using the token mailed at registration."""
+    """Confirm an email with a 6-digit ``otp`` or a legacy mailed ``token``."""
+    if payload.otp:
+        email = payload.email
+        if email is None:  # tolerate {otp} without email: resolve the pending row
+            with storage.get_db().connection() as conn:
+                row = conn.execute(
+                    "SELECT email FROM users WHERE confirm_otp = ?", (payload.otp,)
+                ).fetchone()
+            email = row["email"] if row else None
+        if email is None:
+            raise HTTPException(404, "unknown email")
+        user = storage.confirm_email_by_otp(email, payload.otp)
+        if user is None:
+            raise HTTPException(400, "invalid or expired code")
+        return _confirmed_token_out(user)
     with storage.get_db().connection() as conn:
         row = conn.execute(
             "SELECT * FROM users WHERE confirm_token = ?", (payload.token,)
@@ -67,10 +89,36 @@ def confirm_email(payload: ConfirmIn):
     if row is None:
         raise HTTPException(404, "invalid or expired token")
     storage.confirm_email(row["id"])
-    user = storage.get_user_by_id(row["id"])
-    out = _make_token(user)
-    out.user.email_confirmed = True
-    return out
+    return _confirmed_token_out(storage.get_user_by_id(row["id"]))
+
+
+@router.post("/confirm-otp", response_model=TokenOut)
+def confirm_otp(payload: ConfirmOtpIn):
+    """Confirm an email address with the 6-digit code (obs: auth.otp.confirm)."""
+    if storage.get_user_by_email(payload.email) is None:
+        raise HTTPException(404, "unknown email")
+    user = storage.confirm_email_by_otp(payload.email, payload.otp)
+    if user is None:
+        raise HTTPException(400, "invalid or expired code")
+    return _confirmed_token_out(user)
+
+
+@router.post("/resend-otp", response_model=OtpOut, status_code=202)
+def resend_otp(payload: ResendOtpIn):
+    """Re-mail a fresh code, at most one per minute (obs: auth.otp.resend)."""
+    user = storage.get_user_by_email(payload.email)
+    if user is None:
+        raise HTTPException(404, "unknown email")
+    last = user.get("last_otp_resend_at")
+    if last and (time.time() - float(last)) < storage.OTP_RESEND_COOLDOWN_SECONDS:
+        raise HTTPException(429, "please wait before requesting a new code")
+    ws = storage.get_workspace_by_owner(user["id"])
+    fresh = storage.resend_confirm_otp(user["id"])
+    sent = send_confirmation_otp(
+        to=user["email"], otp=fresh["confirm_otp"],
+        name=user.get("name"), workspace_id=ws["id"] if ws else None,
+    )
+    return OtpOut(sent=sent, expires_in=storage.OTP_TTL_SECONDS)
 
 
 @router.post("/login", response_model=TokenOut)
