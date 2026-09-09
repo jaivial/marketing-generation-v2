@@ -15,7 +15,24 @@ class LoginIn(BaseModel):
 
 
 class ConfirmIn(BaseModel):
-    token: str = Field(min_length=4, max_length=128)
+    """Legacy confirm body: a mailed ``token``, or a 6-digit ``otp``."""
+    email: EmailStr | None = None
+    token: str | None = Field(default=None, min_length=4, max_length=128)
+    otp: str | None = Field(default=None, min_length=6, max_length=6)
+
+
+class ConfirmOtpIn(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
+
+
+class ResendOtpIn(BaseModel):
+    email: EmailStr
+
+
+class OtpOut(BaseModel):
+    sent: bool = True
+    expires_in: int = 900
 
 
 class UserOut(BaseModel):

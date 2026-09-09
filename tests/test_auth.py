@@ -16,6 +16,8 @@ def client(monkeypatch):
     monkeypatch.setenv("DB_PATH", path)
     monkeypatch.setenv("vault_key", "test-secret-key-for-jwt-signing-32-chars")
     monkeypatch.setenv("SKIP_EMAIL_CONFIRM", "")  # require confirmation in tests
+    # Demo bearer tokens are dev-only now (obs: tests.auth.dev_bypass).
+    monkeypatch.setenv("MSWEA_DEV_AUTH_BYPASS", "1")
     dbmod.reset_db_for_tests(path)
     from app.main import app
     with TestClient(app) as c:
@@ -49,11 +51,10 @@ def test_login_blocked_until_confirmed(client):
 
 def test_confirm_then_login(client):
     client.post("/api/auth/register", json={"email": "x@y.com", "password": "password123"})
-    # Fetch the token from the DB (the emailer stub does nothing in tests)
+    # Fetch the code from the DB (the emailer stub does nothing in tests)
     with dbmod.get_db().connection() as conn:
-        row = conn.execute("SELECT confirm_token FROM users WHERE email = 'x@y.com'").fetchone()
-    token = row["confirm_token"]
-    r = client.post("/api/auth/confirm", json={"token": token})
+        row = conn.execute("SELECT confirm_otp FROM users WHERE email = 'x@y.com'").fetchone()
+    r = client.post("/api/auth/confirm", json={"otp": row["confirm_otp"]})
     assert r.status_code == 200, r.text
     # Now login works
     r = client.post("/api/auth/login", json={"email": "x@y.com", "password": "password123"})
@@ -97,6 +98,7 @@ def test_jwt_roundtrip(monkeypatch):
 def test_jwt_tampered_is_rejected(monkeypatch):
     monkeypatch.setenv("vault_key", "test-secret-key")
     tok = security.jwt_for_user("u-001", "a@b.com")
-    # flip the last char of the signature
-    bad = tok[:-1] + ("A" if tok[-1] != "A" else "B")
+    # flip a char inside the signature body -- the trailing char sits on
+    # base64 padding bits, so flipping it can leave the bytes untouched.
+    bad = tok[:-2] + ("A" if tok[-2] != "A" else "B") + tok[-1]
     assert security.jwt_decode(bad) is None

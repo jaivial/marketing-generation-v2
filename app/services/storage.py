@@ -5,6 +5,7 @@ SQL. Every method that mutates state uses ``db.write()``; reads use
 ``db.connection()``. Errors bubble up as Python exceptions.
 """
 from __future__ import annotations
+import hmac
 import json
 import secrets
 import time
@@ -17,21 +18,32 @@ from app.core.db import get_db
 # ---------------------------------------------------------------------------
 # Users
 # ---------------------------------------------------------------------------
+# OTP lifetime + resend cooldown, in seconds (obs: auth.otp.ttl / auth.otp.cooldown).
+OTP_TTL_SECONDS = 900
+OTP_RESEND_COOLDOWN_SECONDS = 60
+
+
+def _new_otp(now: float) -> tuple[str, float]:
+    """Return ``(code, expires_at)`` for a fresh 6-digit confirmation OTP."""
+    return f"{secrets.randbelow(10 ** 6):06d}", now + OTP_TTL_SECONDS
+
+
 def create_user(*, email: str, password_hash: str, name: str | None = None,
                 roles: int = 2) -> dict:
     user_id = f"u-{uuid.uuid4().hex[:8]}"
     now = time.time()
-    confirm = secrets.token_urlsafe(32)
+    otp, expires = _new_otp(now)
     with get_db().write() as conn:
         conn.execute(
             "INSERT INTO users (id, email, password_hash, name, email_confirmed, "
-            "confirm_token, roles, created_at) VALUES (?, ?, ?, ?, 0, ?, ?, ?)",
-            (user_id, email.lower(), password_hash, name, confirm, roles, now),
+            "confirm_otp, confirm_otp_expires, roles, created_at) "
+            "VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)",
+            (user_id, email.lower(), password_hash, name, otp, expires, roles, now),
         )
     return {
         "id": user_id, "email": email.lower(), "name": name,
-        "email_confirmed": False, "confirm_token": confirm,
-        "roles": roles, "created_at": now,
+        "email_confirmed": False, "roles": roles, "created_at": now,
+        "confirm_otp": otp, "confirm_otp_expires": expires,
     }
 
 
@@ -49,12 +61,53 @@ def get_user_by_id(user_id: str) -> dict | None:
     return dict(row) if row else None
 
 
-def confirm_email(user_id: str) -> None:
+def _mark_confirmed(user_id: str) -> None:
+    """Consume the confirmation code and flip ``email_confirmed``."""
     with get_db().write() as conn:
         conn.execute(
-            "UPDATE users SET email_confirmed = 1, confirm_token = NULL WHERE id = ?",
+            "UPDATE users SET email_confirmed = 1, confirm_otp = NULL, "
+            "confirm_otp_expires = NULL, confirm_token = NULL WHERE id = ?",
             (user_id,),
         )
+
+
+def confirm_email(user_id: str) -> None:
+    """Legacy token-based confirmation -- kept for backward compatibility."""
+    _mark_confirmed(user_id)
+
+
+def confirm_email_by_otp(email: str, otp: str) -> dict | None:
+    """Confirm an email with its 6-digit OTP (coord: auth.otp.confirm).
+
+    Returns the refreshed user row, or ``None`` on unknown email, wrong
+    code or expired code.
+    """
+    user = get_user_by_email(email)
+    if user is None:
+        return None
+    stored, expires = user.get("confirm_otp"), user.get("confirm_otp_expires")
+    if not stored or not otp or not hmac.compare_digest(str(stored), str(otp)):
+        return None
+    if expires is None or float(expires) < time.time():
+        return None
+    _mark_confirmed(user["id"])
+    return get_user_by_id(user["id"])
+
+
+def resend_confirm_otp(user_id: str) -> dict:
+    """Regenerate the confirmation OTP (coord: auth.otp.resend)."""
+    now = time.time()
+    otp, expires = _new_otp(now)
+    with get_db().write() as conn:
+        conn.execute(
+            "UPDATE users SET confirm_otp = ?, confirm_otp_expires = ?, "
+            "last_otp_resend_at = ? WHERE id = ?",
+            (otp, expires, now, user_id),
+        )
+    return {
+        "id": user_id, "confirm_otp": otp, "confirm_otp_expires": expires,
+        "last_otp_resend_at": now,
+    }
 
 
 def touch_last_seen(user_id: str) -> None:

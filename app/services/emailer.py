@@ -6,16 +6,17 @@ The Google App Password is fetched from the encrypted DB vault
 
 Two entry points are exposed:
 
-- :func:`send_confirmation_email` \u2014 public, called by ``app/api/auth.py``
-  at registration time. Looks up the workspace's stored SMTP creds; if
-  none are configured the call is silently downgraded to a console log
-  so dev / test environments without a Gmail account still work.
+- :func:`send_confirmation_otp` \u2014 public, called by ``app/api/auth.py``
+  at registration and resend time. Looks up the workspace's stored SMTP
+  creds; if none are configured the 6-digit code is logged at INFO so
+  dev / test environments without a Gmail account still work.
+- :func:`send_confirmation_email` \u2014 legacy link-based entry point, kept
+  as a thin wrapper over :func:`send_confirmation_otp`.
 - :func:`send_email` \u2014 internal, used by the rest of the app for
   notifications (e.g. campaign-failed alerts in a future PR).
 """
 from __future__ import annotations
 import logging
-import os
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -82,23 +83,32 @@ def send_email(*, to: str, subject: str, html: str, text: str,
     )
 
 
-def send_confirmation_email(*, to: str, token: str, name: str | None = None,
-                            workspace_id: str | None = None) -> bool:
-    """Send (or log) a confirmation email."""
-    base = os.getenv("PUBLIC_BASE_URL", "https://marketing-generation.menustudioai.com")
-    link = f"{base}/confirm?token={token}"
-    subject = "Confirm your MarketingForge account"
+def send_confirmation_otp(*, to: str, otp: str, name: str | None = None,
+                          workspace_id: str | None = None) -> bool:
+    """Send (or log) the 6-digit confirmation code (coord: auth.otp.mail)."""
+    subject = "Your MarketingForge confirmation code"
     html = (
         f"<p>Hi {name or ''},</p>"
-        f"<p>Please confirm your MarketingForge account by clicking the link below:</p>"
-        f'<p><a href="{link}">{link}</a></p>'
+        f"<p>Your MarketingForge confirmation code is:</p>"
+        f"<p><strong data-testid=\"email-otp-code\">{otp}</strong></p>"
+        f"<p>It expires in 15 minutes.</p>"
     )
-    text = f"Hi {name or ''},\n\nConfirm your account: {link}\n"
+    text = f"Hi {name or ''},\n\nYour confirmation code is {otp}. It expires in 15 minutes.\n"
 
     creds = _resolve_credentials(workspace_id)
     if not creds:
-        return _send_stub(to=to, subject=subject, link=link)
+        log.info(
+            "emailer: stub-send to=%s subject=%s otp=%s (no SMTP vault configured)",
+            to, subject, otp,
+        )
+        return True
     return _send_via_gmail(
         sender_email=creds[0], app_password=creds[1],
         to=to, subject=subject, html=html, text=text, workspace_id=workspace_id,
     )
+
+
+def send_confirmation_email(*, to: str, token: str, name: str | None = None,
+                            workspace_id: str | None = None) -> bool:
+    """Legacy link-based confirmation -- now a thin wrapper over the OTP mail."""
+    return send_confirmation_otp(to=to, otp=token, name=name, workspace_id=workspace_id)

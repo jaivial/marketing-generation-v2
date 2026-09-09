@@ -87,6 +87,47 @@ class Database:
         """
         with self.write() as conn:
             conn.executescript(_SCHEMA)
+            _migrate_users_otp_columns(conn)
+
+
+# ---------------------------------------------------------------------------
+# Migrations (obs: db.migrate.users_otp, coord: auth.otp.migration)
+# ---------------------------------------------------------------------------
+# Columns the OTP confirmation flow needs. ``confirm_token`` is kept only so
+# databases created before the OTP switch keep working; new installs never
+# write to it.
+_OTP_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("confirm_token", "TEXT"),
+    ("confirm_otp", "TEXT"),
+    ("confirm_otp_expires", "REAL"),
+    ("last_otp_resend_at", "REAL"),
+)
+
+
+def _migrate_users_otp_columns(conn: sqlite3.Connection) -> None:
+    """One-shot, idempotent ALTER block for the users table.
+
+    ``CREATE TABLE IF NOT EXISTS`` never alters an existing table, so a
+    pre-OTP database would be missing the new columns. Legacy
+    ``confirm_token`` values are copied into ``confirm_otp`` (best effort)
+    so registrations made before the switch can still be confirmed.
+    """
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+    ).fetchone() is None:
+        return
+    existing = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
+    for name, ddl in _OTP_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {name} {ddl}")
+    if "confirm_token" in existing:
+        # Best-effort legacy path: a pre-OTP registration keeps a usable code
+        # (15 more minutes) instead of a dead link.
+        conn.execute(
+            "UPDATE users SET confirm_otp = confirm_token, "
+            "confirm_otp_expires = CAST(strftime('%s', 'now') AS INTEGER) + 900 "
+            "WHERE confirm_token IS NOT NULL AND confirm_otp IS NULL"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +140,9 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     name          TEXT,
     email_confirmed INTEGER NOT NULL DEFAULT 0,
-    confirm_token TEXT,
+    confirm_otp         TEXT,   -- 6-digit code, NULL once consumed
+    confirm_otp_expires REAL,   -- unix ts, NULL once consumed
+    last_otp_resend_at  REAL,   -- unix ts, resend rate-limit (obs: auth.otp.resend)
     roles         INTEGER NOT NULL DEFAULT 2,    -- USER bit
     created_at    REAL NOT NULL,
     last_seen     REAL

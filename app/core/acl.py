@@ -9,6 +9,7 @@ that an `admin` has, and so on. We implement that via a `Role` class
 that exposes a `.has(perm)` method.
 """
 from __future__ import annotations
+import os
 from dataclasses import dataclass, field
 from enum import IntFlag, auto
 from typing import Iterable, Optional, Set
@@ -254,30 +255,32 @@ def _parse_demo_token(token: str) -> Optional[Principal]:
 _security = HTTPBearer(auto_error=False)
 
 
+# Dev-only escape hatch so the legacy demo-token suite keeps working.
+DEV_AUTH_BYPASS_ENV = "MSWEA_DEV_AUTH_BYPASS"   # obs: auth.dev_bypass.env
+
+
+def _dev_auth_bypass_enabled() -> bool:
+    """Demo credentials are an explicit dev-only opt-in.
+
+    Without ``MSWEA_DEV_AUTH_BYPASS=1`` the middleware trusts real JWTs only,
+    so a leaked demo token can never impersonate a user in production.
+    """
+    return os.getenv(DEV_AUTH_BYPASS_ENV) == "1"
+
+
 def get_current_principal(
     request: Request,
     creds: Optional[HTTPAuthorizationCredentials] = Depends(_security),
 ) -> Principal:
     """FastAPI dependency: extract the current principal from the request.
 
-    Falls back to an anonymous guest if no credentials are present.
+    Precedence (obs: auth.principal.resolve, coord: auth.jwt-first):
+      1. real signed JWT -> user lookup -> Principal
+      2. demo token / ``X-Demo-Principal`` header -- dev bypass only
+      3. anonymous guest
     """
-    # Allow tests / local development to override via a header
-    override = request.headers.get("X-Demo-Principal")
-    if override:
-        # Format: "<role-int>:<id>[:<email>]"
-        try:
-            flags, rest = override.split(":", 1)
-            id_, _, email = rest.partition(":")
-            return Principal(id=id_, email=email, roles=Role(int(flags)))
-        except ValueError:
-            pass
-
     if creds and creds.credentials:
-        principal = _parse_demo_token(creds.credentials)
-        if principal is not None:
-            return principal
-        # Real JWT path — verified here. We import lazily so test suites
+        # Real JWT path -- verified here. We import lazily so test suites
         # without a configured vault_key still work.
         try:
             from app.core.security import jwt_decode
@@ -294,10 +297,24 @@ def get_current_principal(
                     name=user.get("name") or "",
                     roles=Role(int(user["roles"])),
                 )
+    if _dev_auth_bypass_enabled():
+        if creds and creds.credentials:
+            principal = _parse_demo_token(creds.credentials)
+            if principal is not None:
+                return principal
+        # Header override: "<role-int>:<id>[:<email>]"
+        override = request.headers.get("X-Demo-Principal")
+        if override:
+            try:
+                flags, rest = override.split(":", 1)
+                id_, _, email = rest.partition(":")
+                return Principal(id=id_, email=email, roles=Role(int(flags)))
+            except ValueError:
+                pass
     return Principal(id="guest", email="", roles=Role.GUEST)
 
 
-# ─── Permission guards ────────────────────────────────────────────────
+# ─── Permission guards ────────────────────────────────────────────────────────────────────────────────
 def require_permission(perm: str):
     """FastAPI dependency factory: 403 unless the principal has `perm`."""
     def _dep(principal: Principal = Depends(get_current_principal)) -> Principal:
