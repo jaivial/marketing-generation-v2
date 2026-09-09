@@ -23,6 +23,8 @@ import AdminSystem from './pages/AdminSystem';
 import AdminLogs from './pages/AdminLogs';
 import AdminAcl from './pages/AdminAcl';
 import { RequirePermission } from './lib/guard';
+import { AuthRedirect } from './components/auth-ui/auth-redirect';
+import { SignOut } from './components/auth-ui/sign-out';
 
 const NotFound: React.FC = () => {
   const navigate = useNavigate();
@@ -58,6 +60,8 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/confirm" element={<Confirm />} />
+        {/* AuthRedirect bounces signed-in visitors of the auth views above to /dashboard. */}
+        <Route path="/logout" element={<SignOut />} />
         <Route path="/onboarding" element={<Onboarding />} />
 
         {/* Authenticated user */}
