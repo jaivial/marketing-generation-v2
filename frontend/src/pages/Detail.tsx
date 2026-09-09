@@ -1,11 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../lib/store';
 import TopBar from '../components/TopBar';
 import { cn, timeAgo } from '../lib/utils';
 import { Icon, toast, openModal } from '../components/ui';
-import { ApiError, getCampaign } from '../lib/api';
+import { ApiError, getCampaign, subscribeCampaignEvents } from '../lib/api';
 import type { CampaignDetail } from '../lib/api';
+import { initialPipelineStates, usePipelineEvents } from '../lib/pipelineStates';
+import PipelineCanvas from '../components/PipelineCanvas';
 import type { Campaign, Frame } from '../lib/types';
 
 const TABS = [
@@ -34,6 +36,17 @@ const Detail: React.FC = () => {
   const [detail, setDetail] = useState<CampaignDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<{ status: number } | null>(null);
+  // Bumped by the live feed when a run finishes, so the finished assets are
+  // fetched exactly once more. observation point: `ui.detail.reload`.
+  const [reload, setReload] = useState(0);
+  // Live pipeline view. The seed marks `source` as in-flight: a campaign that
+  // reports itself as running has already started fetching its source.
+  const seed = useMemo(() => initialPipelineStates('generating'), []);
+  const pipeline = usePipelineEvents(seed);
+  // The backend calls an in-flight campaign `running`; the local cache has
+  // historically called it `generating`. Both mean "still being produced".
+  const status = detail?.campaign?.status ?? cached?.status;
+  const live = status === 'running' || status === 'generating';
 
   useEffect(() => {
     let cancelled = false;
@@ -69,7 +82,18 @@ const Detail: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [id, setHistory]);
+  }, [id, setHistory, reload]);
+
+  // A running campaign streams its pipeline over SSE; every event folds into
+  // the same state machine the wizard uses. observation point:
+  // `ui.detail.pipeline-events`, coordination id: campaign id.
+  useEffect(() => {
+    if (!live || !id) return;
+    return subscribeCampaignEvents(id, ev => {
+      pipeline.apply(ev.event, ev.data);
+      if (ev.event === 'done' || ev.event === 'error') setReload(n => n + 1);
+    });
+  }, [id, live, pipeline.apply]);
 
   // Prefer the server payload; fall back to the cached list row.
   const c: Campaign | undefined = detail
@@ -182,6 +206,14 @@ const Detail: React.FC = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         <div className="lg:col-span-2 min-w-0">
+          {live && (
+            <PipelineCanvas
+              states={pipeline.states}
+              latest={pipeline.latest}
+              totalFrames={nFrames}
+              className="mb-4 sm:mb-6"
+            />
+          )}
           <nav className="flex gap-4 sm:gap-6 text-sm border-b border-zinc-800 overflow-x-auto scrollbar-thin whitespace-nowrap">
             {TABS.map(t => {
               const active = tab === t.id;

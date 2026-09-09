@@ -14,6 +14,30 @@ export interface StreamCampaignBody {
   password?: string | null;
 }
 
+/** One `event:`/`data:` pair, exactly as the backend serialises it. */
+export interface SseBlock {
+  event: string;
+  data: any;
+}
+
+/**
+ * Parse a single SSE block (already split on a blank line).
+ * Shared by every SSE consumer so the wire format is decoded in one place.
+ */
+export function parseSseBlock(block: string): SseBlock {
+  const ev = (block.match(/^event:\s*(.+)$/m) || [])[1] || 'message';
+  const dt = (block.match(/^data:\s*(.+)$/m) || [])[1] || '';
+  let data: any;
+  try { data = JSON.parse(dt); } catch { data = dt; }
+  return { event: ev, data };
+}
+
+/** Split a chunk of the SSE body into complete blocks, keeping the tail. */
+export function sseBlocks(buf: string, chunk: string): { blocks: string[]; rest: string } {
+  const parts = (buf + chunk).split('\n\n');
+  return { blocks: parts.slice(0, -1), rest: parts[parts.length - 1] || '' };
+}
+
 export async function* streamCampaign(body: StreamCampaignBody): AsyncGenerator<SseEvent> {
   // Strip empty strings from username/password so backend treats them as null.
   const payload: any = { ...body };
@@ -35,17 +59,76 @@ export async function* streamCampaign(body: StreamCampaignBody): AsyncGenerator<
   while (true) {
     const { value, done } = await reader.read();
     if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const blocks = buf.split('\n\n');
-    buf = blocks.pop() || '';
+    const { blocks, rest } = sseBlocks(buf, dec.decode(value, { stream: true }));
+    buf = rest;
     for (const block of blocks) {
-      const ev = (block.match(/^event:\s*(.+)$/m) || [])[1] || 'message';
-      const dt = (block.match(/^data:\s*(.+)$/m) || [])[1] || '';
-      let data: any;
-      try { data = JSON.parse(dt); } catch { data = dt; }
-      yield { event: ev as any, data };
+      const { event, data } = parseSseBlock(block);
+      yield { event: event as any, data };
     }
   }
+}
+
+// ─── Live pipeline events (SSE) ──────────────────────────────────────────
+// observation point: `ui.pipeline.events` — the backend can match these
+// requests to a run via the `X-Mf-Coordination-Id` header we send.
+
+/** Backoff floor/ramp for reconnects: 500ms, 1s, 2s, 4s, then capped at 5s. */
+const SSE_BACKOFF_BASE_MS = 500;
+const SSE_BACKOFF_CAP_MS = 5000;
+
+/**
+ * Subscribe to `GET /api/campaigns/{id}/events`, replaying every persisted
+ * event before following live ones. Reconnects with exponential backoff on
+ * error/disconnect and stops for good on `done` / `error`.
+ *
+ * Returns an unsubscribe function (idempotent).
+ */
+export function subscribeCampaignEvents(
+  id: string,
+  onEvent: (e: SseBlock) => void,
+): () => void {
+  const coordinationId = `campaign-${id}-${Math.random().toString(36).slice(2, 8)}`;
+  const ctrl = new AbortController();
+  let closed = false;
+  let attempt = 0;
+
+  const connect = async (): Promise<void> => {
+    while (!closed && !ctrl.signal.aborted) {
+      try {
+        // Native EventSource cannot send the Authorization header, so the
+        // stream is read with the same fetch reader streamCampaign() uses.
+        const r = await fetch(`${apiBase}/api/campaigns/${encodeURIComponent(id)}/events`, {
+          headers: {
+            'Accept': 'text/event-stream',
+            ...authHeaders(),
+            'X-Mf-Observation-Point': 'ui.pipeline.events',
+            'X-Mf-Coordination-Id': coordinationId,
+          },
+          signal: ctrl.signal,
+        });
+        if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+        attempt = 0;
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const { blocks, rest } = sseBlocks(buf, dec.decode(value, { stream: true }));
+          buf = rest;
+          for (const evt of blocks.map(parseSseBlock)) {
+            onEvent(evt);
+            if (evt.event === 'done' || evt.event === 'error') { closed = true; return; }
+          }
+        }
+      } catch { /* unreachable backend — back off and try again */ }
+      if (closed || ctrl.signal.aborted) return;
+      await new Promise(res => setTimeout(res, Math.min(SSE_BACKOFF_CAP_MS, SSE_BACKOFF_BASE_MS * 2 ** attempt++)));
+    }
+  };
+
+  void connect();
+  return () => { closed = true; ctrl.abort(); };
 }
 
 /**
