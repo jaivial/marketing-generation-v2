@@ -141,8 +141,9 @@ import {
   isAuthenticated, canDo, rolesList, ROLE_INFO,
 } from './acl';
 import {
-  confirmOtp as apiConfirmOtp, fetchWhoami, login as apiLogin,
-  register as apiRegister, resendOtp as apiResendOtp, setStoredToken,
+  confirmOtp as apiConfirmOtp, forgotPassword as apiForgotPassword,
+  fetchWhoami, login as apiLogin, register as apiRegister,
+  resendOtp as apiResendOtp, resetPassword as apiResetPassword, setStoredToken,
   type AuthMe, type TokenOut,
 } from './api';
 
@@ -198,6 +199,10 @@ interface AuthActions {
   register: (name: string, email: string, password: string) => Promise<{ requiresOtp: true }>;
   confirmOtp: (email: string, otp: string) => Promise<void>;
   resendOtp: (email: string) => Promise<void>;
+  /** Always resolves: the backend answers 200 even for unknown addresses. */
+  forgotPassword: (email: string) => Promise<{ ok: true }>;
+  /** Rejects with a 400 ApiError when the reset token is invalid or expired. */
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   logout: () => void;
   hasRole: (r: RoleName) => boolean;
   hasAnyRole: (r: RoleName[]) => boolean;
@@ -255,11 +260,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await apiResendOtp(email);
   }, []);
 
+  const forgotPassword = useCallback(async (email: string) => {
+    await apiForgotPassword(email);
+    return { ok: true } as const;
+  }, []);
+
+  const resetPassword = useCallback(async (token: string, newPassword: string) => {
+    await apiResetPassword(token, newPassword);
+  }, []);
+
   const logout = useCallback(() => { setStoredToken(null); setAuth({ ...DEFAULT_AUTH, loading: false }); }, []);
 
   const value: AuthCtx = {
     ...auth,
-    refresh, login, register, confirmOtp, resendOtp, logout,
+    refresh, login, register, confirmOtp, resendOtp, forgotPassword, resetPassword, logout,
     hasRole: (r) => hasRole(auth.roles, r),
     hasAnyRole: (rs) => hasAnyRole(auth.roles, rs),
     can: (p) => canDo(auth.roles, p),
