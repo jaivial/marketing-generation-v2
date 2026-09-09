@@ -268,24 +268,28 @@ def _dev_auth_bypass_enabled() -> bool:
     return os.getenv(DEV_AUTH_BYPASS_ENV) == "1"
 
 
-def get_current_principal(
-    request: Request,
-    creds: Optional[HTTPAuthorizationCredentials] = Depends(_security),
-) -> Principal:
-    """FastAPI dependency: extract the current principal from the request.
+def resolve_principal_from_request(request: Request, token: str | None = None) -> Principal:
+    """Resolve the Principal from a raw Request.
+
+    Callable from anywhere (middleware, scripts, tests) because it does not
+    depend on FastAPI's ``Depends`` injection. The ``token`` argument is
+    only used by the test suite to bypass header parsing.
 
     Precedence (obs: auth.principal.resolve, coord: auth.jwt-first):
       1. real signed JWT -> user lookup -> Principal
       2. demo token / ``X-Demo-Principal`` header -- dev bypass only
       3. anonymous guest
     """
-    if creds and creds.credentials:
+    if token is None:
+        creds_header = request.headers.get("authorization", "")
+        token = creds_header[len("Bearer "):] if creds_header.startswith("Bearer ") else ""
+    if token:
         # Real JWT path -- verified here. We import lazily so test suites
         # without a configured vault_key still work.
         try:
             from app.core.security import jwt_decode
             from app.services import storage
-            payload = jwt_decode(creds.credentials)
+            payload = jwt_decode(token)
         except Exception:
             payload = None
         if payload is not None:
@@ -298,8 +302,8 @@ def get_current_principal(
                     roles=Role(int(user["roles"])),
                 )
     if _dev_auth_bypass_enabled():
-        if creds and creds.credentials:
-            principal = _parse_demo_token(creds.credentials)
+        if token:
+            principal = _parse_demo_token(token)
             if principal is not None:
                 return principal
         # Header override: "<role-int>:<id>[:<email>]"
@@ -312,6 +316,20 @@ def get_current_principal(
             except ValueError:
                 pass
     return Principal(id="guest", email="", roles=Role.GUEST)
+
+
+def get_current_principal(
+    request: Request,
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(_security),
+) -> Principal:
+    """FastAPI dependency: extract the current principal from the request.
+
+    Thin wrapper around ``resolve_principal_from_request`` so the same
+    precedence applies whether the request comes through a route handler
+    dependency or through the global ACL middleware.
+    """
+    token = creds.credentials if creds else None
+    return resolve_principal_from_request(request, token=token)
 
 
 # ─── Permission guards ────────────────────────────────────────────────────────────────────────────────
