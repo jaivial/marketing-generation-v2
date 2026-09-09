@@ -4,8 +4,11 @@ All non-public routes are gated by the ACL. Each endpoint declares
 the minimum permission (or role) required via a dependency.
 """
 from __future__ import annotations
+import asyncio
 import json
 import pathlib
+from dataclasses import replace as _replace
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse, HTMLResponse
 from sse_starlette.sse import EventSourceResponse
@@ -20,6 +23,7 @@ from app.core.acl import (
 from app.core.container import orchestrator
 from app.models.schemas import CampaignRequest
 from app.services import storage
+from app.services import event_log
 from app.services.campaign_view import (
     campaign_detail_payload,
     campaign_summary,
@@ -181,6 +185,112 @@ async def create_campaign_sync(
         if ev["event"] == "error":
             raise HTTPException(status_code=500, detail=ev["data"])
     return {"events": events}
+
+
+#: Background generation tasks, kept referenced so the loop never GCs them.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+async def _run_in_background(orch, domain_req, campaign_id: str) -> None:
+    """Drive the pipeline off the request thread.
+
+    Coordination id: pipeline.background.run. Every event is appended to the
+    store *before* it is handed to a subscriber queue, so a client that
+    reconnects replays exactly what a live client saw.
+
+    The framework stamps the terminal status (``done`` / ``failed``) itself so
+    a custom orchestrator or a test fake that yields a ``done`` event still
+    results in a correctly-closed campaign row.
+    """
+    try:
+        async for ev in orch.run(domain_req):
+            event_log.publish(campaign_id, ev["event"], ev["data"])
+            if ev["event"] == "done":
+                storage.set_campaign_status(campaign_id, "done")
+            elif ev["event"] == "error":
+                storage.set_campaign_status(
+                    campaign_id, "failed",
+                    plan_json={"error": ev["data"].get("message", "error")},
+                )
+    except Exception as e:  # noqa: BLE001 -- the run must always terminate
+        event_log.publish(campaign_id, "error", {
+            "code": getattr(e, "code", "pipeline_error"),
+            "message": str(e),
+            "campaign_id": campaign_id,
+        })
+        try:
+            storage.set_campaign_status(
+                campaign_id, "failed", plan_json={"error": str(e)},
+            )
+        except Exception:
+            pass
+
+
+@router.post("/campaigns/start", status_code=status.HTTP_202_ACCEPTED)
+async def start_campaign(
+    req: CampaignRequest,
+    principal: Principal = Depends(require_permission(Perm.CREATE_CAMPAIGN)),
+) -> dict:
+    """Create the row and start generating in the background.
+
+    Coordination id: pipeline.campaign.start. Returns 202 with the id straight
+    away; the client follows GET /api/campaigns/{id}/events (SSE) instead of
+    holding an HTTP request open for the whole run.
+    """
+    workspace_id = req.workspace_id or workspace_id_for(principal)
+    if not workspace_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="no workspace to run this campaign in",
+        )
+    row = storage.create_campaign(
+        workspace_id=workspace_id,
+        user_id=principal.id,
+        source_kind=req.source_kind,
+        target=req.target,
+        duration_s=req.duration_s,
+        style=req.style,
+    )
+    storage.set_campaign_status(row["id"], "running")
+    # The orchestrator adopts the row we just created instead of making its own.
+    domain_req = _replace(_build_req(req, principal), campaign_id=row["id"])
+    task = asyncio.create_task(
+        _run_in_background(orchestrator(), domain_req, row["id"])
+    )
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    return {"id": row["id"], "status": "running"}
+
+
+@router.get("/campaigns/{campaign_id}/events")
+async def campaign_events(
+    campaign_id: str,
+    principal: Principal = Depends(require_permission(Perm.VIEW_CAMPAIGNS_OWN)),
+):
+    """SSE feed: full replay of the persisted events, then live tail.
+
+    Coordination id: pipeline.campaign.events. Scoped exactly like the detail
+    endpoint; the stream closes itself once the run hits done | error.
+    """
+    row = storage.get_campaign(campaign_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="campaign not found")
+    if row.get("workspace_id") != workspace_id_for(principal):
+        if not principal.can(Perm.VIEW_CAMPAIGNS_ALL):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="campaign belongs to another workspace",
+            )
+
+    async def event_gen():
+        async for item in event_log.stream(campaign_id):
+            yield {
+                "event": item["event"],
+                "data": json.dumps(item["data"]),
+                "id": str(item["seq"]),   # obs: pipeline.event.seq
+            }
+
+    return EventSourceResponse(event_gen())
 
 
 @router.get("/campaigns/history")

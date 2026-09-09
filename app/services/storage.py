@@ -284,6 +284,47 @@ def list_campaign_assets(campaign_id: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Campaign event log (SSE replay)
+# ---------------------------------------------------------------------------
+def append_campaign_event(campaign_id: str, event: str, data: dict | None) -> int:
+    """Persist one pipeline event and return its per-campaign sequence number.
+
+    ``seq`` starts at 1 and is allocated inside the same write transaction as
+    the insert, so a reconnecting client can rely on it being gapless.
+    """
+    now = time.time()
+    with get_db().write() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(MAX(seq), 0) FROM campaign_events WHERE campaign_id = ?",
+            (campaign_id,),
+        ).fetchone()
+        seq = int(row[0]) + 1
+        conn.execute(
+            "INSERT INTO campaign_events (campaign_id, seq, event, data_json, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (campaign_id, seq, event,
+             json.dumps(data) if data is not None else None, now),
+        )
+    return seq
+
+
+def list_campaign_events(campaign_id: str) -> list[dict]:
+    """Every persisted event for a campaign, oldest first."""
+    with get_db().connection() as conn:
+        rows = conn.execute(
+            "SELECT campaign_id, seq, event, data_json, created_at "
+            "FROM campaign_events WHERE campaign_id = ? ORDER BY seq",
+            (campaign_id,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["data"] = json.loads(d.pop("data_json")) if d.get("data_json") else {}
+        out.append(d)
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Email vault (encrypted Gmail SMTP credentials)
 # ---------------------------------------------------------------------------
 def upsert_email_vault(workspace_id: str, *, sender_email: str,
