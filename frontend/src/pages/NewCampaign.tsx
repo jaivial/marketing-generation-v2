@@ -6,6 +6,7 @@ import { streamCampaign, fetchEstimate, fetchBalance, type CampaignEstimate } fr
 import { Icon, toast, type IconName } from '../components/ui';
 import { cn, autoName, nFrames } from '../lib/utils';
 import { formatCredits, formatCreditsUsd } from '../lib/credits';
+import { isPipelineRunning, usePipelineEvents, type PipelineNodeState } from '../lib/pipelineStates';
 import type { SseEvent, Campaign, Frame } from '../lib/types';
 
 const STEPS = [
@@ -48,9 +49,10 @@ const NewCampaign: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [campaignId, setCampaignId] = useState<string | null>(null);
-  const [pipelineStates, setPipelineStates] = useState<Record<string, 'active' | 'done' | 'error' | 'idle'>>({
-    plan: 'idle', frame: 'idle', script: 'idle', video: 'idle',
-  });
+  // Same state machine the detail-page canvas draws — one source of truth.
+  // observation point: `ui.wizard.pipeline-events`.
+  const pipeline = usePipelineEvents();
+  const pipelineStates = pipeline.states;
 
   // ─── Cost preview ─────────────────────────────────────────────────────────
   // The wizard asks the backend what a campaign of this length costs and
@@ -102,6 +104,7 @@ const NewCampaign: React.FC = () => {
     setVideoUrl(null);
     setError(null);
     setDone(false);
+    pipeline.reset();
 
     const id = 'c-' + Math.random().toString(36).slice(2, 8);
     setCampaignId(id);
@@ -121,10 +124,6 @@ const NewCampaign: React.FC = () => {
     };
     setHistory(curr => [draft, ...curr.filter(i => i.id !== draft.id)]);
 
-    const setPipe = (k: string, s: 'active' | 'done' | 'error') => {
-      setPipelineStates(prev => ({ ...prev, [k]: s }));
-    };
-
     try {
       const stream = streamCampaign({
         source_kind,
@@ -141,7 +140,7 @@ const NewCampaign: React.FC = () => {
       const msg = String(err?.message || err || 'Unknown error');
       setError(msg);
       toast(msg, 'error', 6000);
-      Object.keys(pipelineStates).forEach(k => setPipe(k, 'error'));
+      pipeline.fail();
       setHistory(curr => curr.map(i => i.id === id ? { ...i, status: 'failed' } : i));
       setRunning(false);
     }
@@ -150,29 +149,29 @@ const NewCampaign: React.FC = () => {
   const handleEvent = (ev: SseEvent) => {
     if (ev.event === 'plan') {
       setPlan(ev.data);
-      setPipelineStates(p => ({ ...p, plan: 'done', frame: 'active' }));
+      pipeline.apply('plan', ev.data);
       setHistory(curr => curr.map(i => i.id === campaignId ? { ...i, plan: ev.data } : i));
     } else if (ev.event === 'frame') {
       setFrames(f => [...f, ev.data]);
-      setPipelineStates(p => ({ ...p, frame: 'active' }));
+      pipeline.apply('frame', ev.data);
       setHistory(curr => curr.map(i => i.id === campaignId ? { ...i, frames: [...(i.frames || []), ev.data] } : i));
     } else if (ev.event === 'script') {
       setScript(ev.data?.script || '');
-      setPipelineStates(p => ({ ...p, frame: 'done', script: 'done', video: 'active' }));
+      pipeline.apply('script', ev.data);
       setHistory(curr => curr.map(i => i.id === campaignId ? { ...i, script: ev.data?.script } : i));
     } else if (ev.event === 'video') {
       setVideoUrl(ev.data?.url || null);
-      setPipelineStates(p => ({ ...p, video: 'done' }));
+      pipeline.apply('video', ev.data);
       setHistory(curr => curr.map(i => i.id === campaignId ? { ...i, videoUrl: ev.data?.url } : i));
     } else if (ev.event === 'done') {
       setDone(true);
-      setPipelineStates(p => ({ ...p, video: 'done' }));
+      pipeline.apply('done', ev.data);
       setHistory(curr => curr.map(i => i.id === campaignId ? { ...i, status: 'done' } : i));
       toast('Campaign generated successfully', 'success');
     } else if (ev.event === 'error') {
       setError(ev.data?.message || 'Unknown error');
       toast(ev.data?.message || 'Error', 'error', 6000);
-      Object.keys(pipelineStates).forEach(k => setPipelineStates(p => ({ ...p, [k]: 'error' })));
+      pipeline.fail();
       setHistory(curr => curr.map(i => i.id === campaignId ? { ...i, status: 'failed' } : i));
     }
   };
@@ -485,8 +484,7 @@ const NewCampaign: React.FC = () => {
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold flex items-center gap-2 text-sm sm:text-base">
                   <span className={cn('w-2 h-2 rounded-full',
-                    pipelineStates.plan === 'active' || pipelineStates.frame === 'active' || pipelineStates.script === 'active' || pipelineStates.video === 'active'
-                      ? 'bg-brand-400 animate-pulse' : 'bg-zinc-600')} />
+                    isPipelineRunning(pipelineStates) ? 'bg-brand-400 animate-pulse' : 'bg-zinc-600')} />
                   Pipeline
                 </h3>
                 <span className="text-[10px] sm:text-xs text-zinc-500 whitespace-nowrap" id="live-status">
@@ -495,7 +493,7 @@ const NewCampaign: React.FC = () => {
               </div>
               <div className="space-y-3 text-xs sm:text-sm">
                 {pipelineRow('plan', 'Plan · hook, tagline, CTA, audience, tone', 'MiniMax-M3 plan generation', pipelineStates.plan)}
-                {pipelineRow('frame', 'Frames · 1 per 2s', 'Image generation via wavespeed', pipelineStates.frame)}
+                {pipelineRow('frames', 'Frames · 1 per 2s', 'Image generation via wavespeed', pipelineStates.frames)}
                 {pipelineRow('script', 'Script · VO + shot list', 'MiniMax-M3 script', pipelineStates.script)}
                 {pipelineRow('video', 'Video · MiniMax-H3 assembly', 'Stitch frames + master prompt', pipelineStates.video)}
               </div>
@@ -608,9 +606,10 @@ const NewCampaign: React.FC = () => {
   );
 };
 
-const pipelineRow = (key: string, label: string, sub: string, state: string) => {
-  const isActive = state === 'active';
-  const isDone = state === 'done';
+const pipelineRow = (key: string, label: string, sub: string, state: PipelineNodeState) => {
+  const isActive = state === 'generating';
+  const isDone = state === 'completed';
+  const isWarning = state === 'warning';
   const isError = state === 'error';
   let iconCls = 'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ';
   let icon: React.ReactNode = '·';
@@ -620,9 +619,12 @@ const pipelineRow = (key: string, label: string, sub: string, state: string) => 
   } else if (isActive) {
     iconCls += 'bg-brand-500/20 text-brand-300 border-2 border-brand-500';
     icon = <Icon name="loader" size={12} className="animate-spin" strokeWidth={2} />;
+  } else if (isWarning) {
+    iconCls += 'bg-yellow-500/20 text-yellow-400';
+    icon = <Icon name="alertTriangle" size={12} strokeWidth={2.5} />;
   } else if (isError) {
     iconCls += 'bg-rose-500/20 text-rose-400';
-    icon = '!';
+    icon = <Icon name="alertCircle" size={12} strokeWidth={2.5} />;
   } else {
     iconCls += 'bg-zinc-800 text-zinc-500';
   }
