@@ -180,12 +180,10 @@ export interface CampaignDetail {
   assets: CampaignAsset[];
 }
 
-/** Thrown by `getCampaign` so callers can branch on 403 vs 404. */
+/** Thrown by every helper here so callers can branch on 401/403/404/409/429. */
 export class ApiError extends Error {
-  status: number;
-  constructor(status: number, message: string) {
-    super(message);
-    this.status = status;
+  constructor(readonly status: number, message: string) {
+    super(message || `HTTP ${status}`);
     this.name = 'ApiError';
   }
 }
@@ -221,11 +219,34 @@ export interface AuthMe {
   id: string;
   email: string;
   name: string;
-  roles: number;
-  roles_names: RoleName[];
+  /** Optional: the real backend principal ships the role flags implicitly. */
+  roles?: number;
+  roles_names?: RoleName[];
   is_authenticated: boolean;
   is_admin: boolean;
-  is_root: boolean;
+  is_root?: boolean;
+}
+
+/** `UserOut` from `app/models/auth.py` — returned by every token endpoint. */
+export interface AuthUserOut {
+  id: string;
+  email: string;
+  name: string | null;
+  email_confirmed: boolean;
+  workspace_id: string | null;
+}
+
+/** `TokenOut`: the JWT plus the principal it was minted for. */
+export interface TokenOut {
+  access_token: string;
+  token_type: string;
+  user: AuthUserOut;
+}
+
+/** `OtpOut`: result of asking the backend to re-mail a confirmation code. */
+export interface OtpOut {
+  sent: boolean;
+  expires_in: number;
 }
 
 export interface AdminUser {
@@ -255,10 +276,37 @@ export interface AdminSystem {
   env: Record<string, string>;
 }
 
-const TOKEN_KEY = 'mf-acl-token';
+// ── Auth: JWT storage + email/password endpoints ───────────────────
+// observation point: `ui.auth` — every call below carries an
+// `X-Mf-Observation-Point` / `X-Mf-Coordination-Id` pair so the backend can
+// trace a browser session end-to-end.
+
+const TOKEN_KEY = 'auth_token';
+/** Key the pre-JWT demo builds used; migrated once, then dropped. */
+const LEGACY_TOKEN_KEY = 'mf-acl-token';
+
+/** The old client minted its own `demo:<roles>:<id>` tokens — never replay those. */
+const isDemoToken = (tok: string | null): boolean => !!tok && tok.includes('demo:');
+
+/**
+ * Move the legacy demo token key out of the way (obs: ui.auth.token.migrate).
+ * A stale demo token would be rejected by the JWT-first middleware, so we
+ * drop it instead of carrying it over under the new key.
+ */
+function migrateTokenKey(): void {
+  try {
+    const legacy = localStorage.getItem(LEGACY_TOKEN_KEY);
+    if (legacy === null) return;
+    localStorage.removeItem(LEGACY_TOKEN_KEY);
+    if (!isDemoToken(legacy) && !localStorage.getItem(TOKEN_KEY)) {
+      localStorage.setItem(TOKEN_KEY, legacy);
+    }
+  } catch { /* private mode / quota — behave as signed out */ }
+}
 
 export function getStoredToken(): string | null {
   try {
+    migrateTokenKey();
     return localStorage.getItem(TOKEN_KEY);
   } catch {
     return null;
@@ -267,28 +315,70 @@ export function getStoredToken(): string | null {
 
 export function setStoredToken(tok: string | null) {
   try {
-    if (tok) localStorage.setItem(TOKEN_KEY, tok);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch {}
+    if (tok) {
+      localStorage.setItem(TOKEN_KEY, tok);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(LEGACY_TOKEN_KEY);
+    }
+  } catch { /* ignore */ }
 }
 
 export function authHeaders(): Record<string, string> {
   const tok = getStoredToken();
-  if (!tok) return {};
-  // Demo token format: "Bearer demo:<role-int>:<id>[:<email>]"
-  if (!tok.startsWith('Bearer ')) return { Authorization: `Bearer ${tok}` };
-  return { Authorization: tok };
+  return tok ? { Authorization: `Bearer ${tok}` } : {};
 }
 
-export async function fetchWhoami(): Promise<AuthMe> {
-  const r = await fetch(`${apiBase}/api/auth/whoami`, { headers: authHeaders() });
-  if (!r.ok) throw new Error(`whoami failed: ${r.status}`);
+/** Flatten a FastAPI error body (`detail` string or validation list) to text. */
+async function errorDetail(r: Response): Promise<string> {
+  const raw = await r.text().catch(() => '');
+  try {
+    const body = JSON.parse(raw);
+    const d = body?.detail ?? body;
+    if (Array.isArray(d)) return d.map((e: any) => e?.msg || JSON.stringify(e)).join(', ');
+    if (typeof d === 'string') return d;
+  } catch { /* plain-text body */ }
+  return raw || `HTTP ${r.status}`;
+}
+
+/** POST a JSON auth payload, tagging it with the given observation point. */
+async function postAuth<T>(path: string, body: unknown, observationPoint: string): Promise<T> {
+  const coordinationId = `${observationPoint}-${Math.random().toString(36).slice(2, 8)}`;
+  const r = await fetch(`${apiBase}${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Mf-Observation-Point': observationPoint,
+      'X-Mf-Coordination-Id': coordinationId,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new ApiError(r.status, await errorDetail(r));
   return r.json();
 }
 
-export async function loginDemo(roles: number, userId: string, email?: string): Promise<string> {
-  // Server expects "Bearer demo:<int>:<id>[:<email>]"
-  return `Bearer demo:${roles}:${userId}${email ? ':' + email : ''}`;
+/** Create an account; the backend mails a 6-digit code and returns an unconfirmed token. */
+export const register = (name: string, email: string, password: string): Promise<TokenOut> =>
+  postAuth('/api/auth/register', { name, email, password }, 'ui.auth.register');
+
+/** Email + password sign-in; 403 when the address is not confirmed yet. */
+export const login = (email: string, password: string): Promise<TokenOut> =>
+  postAuth('/api/auth/login', { email, password }, 'ui.auth.login');
+
+/** Swap a 6-digit code for a confirmed-session token. */
+export const confirmOtp = (email: string, otp: string): Promise<TokenOut> =>
+  postAuth('/api/auth/confirm-otp', { email, otp }, 'ui.auth.otp.confirm');
+
+/** Re-mail a fresh code (429 while the 60s cooldown is running). */
+export const resendOtp = (email: string): Promise<OtpOut> =>
+  postAuth('/api/auth/resend-otp', { email }, 'ui.auth.otp.resend');
+
+export async function fetchWhoami(): Promise<AuthMe> {
+  const r = await fetch(`${apiBase}/api/auth/whoami`, {
+    headers: { ...authHeaders(), 'X-Mf-Observation-Point': 'ui.auth.whoami' },
+  });
+  if (!r.ok) throw new ApiError(r.status, await errorDetail(r));
+  return r.json();
 }
 
 export async function adminListUsers(): Promise<AdminUser[]> {

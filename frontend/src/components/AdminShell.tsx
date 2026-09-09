@@ -5,6 +5,7 @@ import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../lib/store';
 import { Icon, type IconName } from './ui';
+import AuthMenu from './AuthMenu';
 import { cn } from '../lib/utils';
 
 interface AdminNavItem { path: string; label: string; icon: IconName; perm: string; }
@@ -17,7 +18,7 @@ const NAV: AdminNavItem[] = [
 ];
 
 const AdminShell: React.FC = () => {
-  const { rolesNames, isRoot, can } = useAuth();
+  const { isRoot, email, can } = useAuth();
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-rose-500/10 via-amber-500/5 to-transparent border border-rose-500/20 rounded-xl p-4 flex items-start gap-3">
@@ -26,11 +27,15 @@ const AdminShell: React.FC = () => {
           <p className="text-sm font-semibold text-rose-300">
             Restricted area — root operations
           </p>
-          <p className="text-xs text-zinc-400 mt-0.5">
-            You are signed in as: {rolesNames.map(r => r.toUpperCase()).join(', ')}.
+          <p className="text-xs text-zinc-400 mt-0.5" data-testid="admin-shell-session-line">
+            Signed in as {email || 'root'}.
             Actions here affect every user and system setting globally. Use with care.
           </p>
         </div>
+      </div>
+
+      <div className="flex justify-end">
+        <AuthMenu scope="admin-shell" />
       </div>
 
       <nav className="flex flex-wrap items-center gap-1 border-b border-zinc-800">

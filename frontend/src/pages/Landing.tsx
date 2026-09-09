@@ -29,7 +29,7 @@ const Landing: React.FC = () => {
             <Link to="/pricing" className="hover:text-white">Pricing</Link>
           </nav>
           <div className="flex items-center gap-2 sm:gap-3">
-            <Link to="/dashboard" className="hidden sm:inline text-sm text-zinc-400 hover:text-white">Sign in</Link>
+            <Link to="/login" data-testid="landing-signin-link" className="hidden sm:inline text-sm text-zinc-400 hover:text-white">Sign in</Link>
             <button
               onClick={() => navigate('/new')}
               className="btn btn-primary text-xs sm:text-sm px-3 py-1.5"

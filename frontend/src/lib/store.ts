@@ -131,13 +131,20 @@ export function useStore(): StoreContextValue {
 }
 
 
-// ─── Auth & ACL state ────────────────────────────────────────────────
+// ─── Auth & ACL state ────────────────────────────────────────────────────
+// The principal comes from GET /api/auth/whoami; the JWT lives in
+// localStorage under `auth_token` (see lib/api.ts) and every request picks it
+// up through authHeaders().
 import type { RoleName, Permission } from './acl';
 import {
   hasAnyRole, hasRole, isRoot as isRootFn, isAdmin as isAdminFn,
-  isAuthenticated, canDo, rolesList,
+  isAuthenticated, canDo, rolesList, ROLE_INFO,
 } from './acl';
-import { fetchWhoami, getStoredToken, loginDemo, setStoredToken } from './api';
+import {
+  confirmOtp as apiConfirmOtp, fetchWhoami, login as apiLogin,
+  register as apiRegister, resendOtp as apiResendOtp, setStoredToken,
+  type AuthMe, type TokenOut,
+} from './api';
 
 export interface AuthState {
   id: string;
@@ -148,6 +155,8 @@ export interface AuthState {
   isAuthenticated: boolean;
   isAdmin: boolean;
   isRoot: boolean;
+  /** False until the boot-time whoami has resolved. */
+  loading: boolean;
 }
 
 const DEFAULT_AUTH: AuthState = {
@@ -155,11 +164,40 @@ const DEFAULT_AUTH: AuthState = {
   roles: 1,  // GUEST
   rolesNames: ['guest'],
   isAuthenticated: false, isAdmin: false, isRoot: false,
+  loading: true,
 };
+
+/** Personal workspace id, written at register/login and read by /onboarding. */
+const WORKSPACE_KEY = 'workspace_id';
+
+/** Role bits, mirrored from app/core/acl.py via the frontend ACL table. */
+const bit = (r: RoleName): number => ROLE_INFO[r].bit;
+
+/**
+ * Derive the ACL bitmask the UI reasons about (obs: ui.auth.principal.roles).
+ * The JWT backend expresses the principal as flags on the user row, so we map
+ * the whoami flags onto the same bitmask the demo tokens used to carry.
+ */
+function principalRoles(me: AuthMe): number {
+  if (typeof me.roles === 'number' && me.roles > 0) return me.roles;
+  if (me.is_root) return bit('root') | bit('admin') | bit('user');
+  if (me.is_admin) return bit('admin') | bit('user');
+  return me.is_authenticated ? bit('user') : bit('guest');
+}
+
+/** Keep the workspace id fresh for the onboarding wizard. */
+function rememberWorkspace(tok: TokenOut): void {
+  const ws = tok?.user?.workspace_id;
+  if (!ws) return;
+  try { localStorage.setItem(WORKSPACE_KEY, ws); } catch { /* ignore */ }
+}
 
 interface AuthActions {
   refresh: () => Promise<void>;
-  loginAs: (role: RoleName, userId: string, email?: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string) => Promise<{ requiresOtp: true }>;
+  confirmOtp: (email: string, otp: string) => Promise<void>;
+  resendOtp: (email: string) => Promise<void>;
   logout: () => void;
   hasRole: (r: RoleName) => boolean;
   hasAnyRole: (r: RoleName[]) => boolean;
@@ -172,33 +210,56 @@ const AuthContext = createContext<AuthCtx | null>(null);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [auth, setAuth] = useState<AuthState>(DEFAULT_AUTH);
 
+  /** Re-read the principal from the backend using the stored token. */
   const refresh = useCallback(async () => {
     try {
       const me = await fetchWhoami();
       setAuth({
         id: me.id, email: me.email, name: me.name,
-        roles: me.roles, rolesNames: me.roles_names,
-        isAuthenticated: me.is_authenticated, isAdmin: me.is_admin, isRoot: me.is_root,
+        roles: principalRoles(me),
+        rolesNames: me.roles_names ?? rolesList(principalRoles(me)),
+        isAuthenticated: me.is_authenticated, isAdmin: me.is_admin,
+        isRoot: !!me.is_root, loading: false,
       });
     } catch (e) {
-      setAuth(DEFAULT_AUTH);
+      setAuth({ ...DEFAULT_AUTH, loading: false });
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  // Boot: a stored JWT means we are potentially signed in — ask the backend.
+  useEffect(() => { void refresh(); }, [refresh]);
 
-  const loginAs = useCallback(async (role: RoleName, userId: string, email?: string) => {
-    const roleBit = { guest: 1, user: 2, viewer: 4, billing: 8, admin: 16, root: 32, USER: 2, ADMIN: 16, ROOT: 32 }[role] ?? 2;
-    const tok = await loginDemo(roleBit, userId, email);
-    setStoredToken(tok);
+  /** Store the token a login/confirm returned, then re-resolve the principal. */
+  const adopt = useCallback(async (tok: TokenOut) => {
+    setStoredToken(tok.access_token);
+    rememberWorkspace(tok);
     await refresh();
   }, [refresh]);
 
-  const logout = useCallback(() => { setStoredToken(null); setAuth(DEFAULT_AUTH); }, []);
+  const login = useCallback(async (email: string, password: string) => {
+    await adopt(await apiLogin(email, password));
+  }, [adopt]);
+
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    await apiRegister(name, email, password);
+    // Deliberately no token yet: the address is unconfirmed, so the session
+    // starts only once the OTP has been verified.
+    return { requiresOtp: true } as const;
+  }, []);
+
+  const confirmOtp = useCallback(async (email: string, otp: string) => {
+    await adopt(await apiConfirmOtp(email, otp));
+  }, [adopt]);
+
+  const resendOtp = useCallback(async (email: string) => {
+    await apiResendOtp(email);
+  }, []);
+
+  const logout = useCallback(() => { setStoredToken(null); setAuth({ ...DEFAULT_AUTH, loading: false }); }, []);
 
   const value: AuthCtx = {
     ...auth,
-    refresh, loginAs, logout,
+    refresh, login, register, confirmOtp, resendOtp, logout,
     hasRole: (r) => hasRole(auth.roles, r),
     hasAnyRole: (rs) => hasAnyRole(auth.roles, rs),
     can: (p) => canDo(auth.roles, p),
