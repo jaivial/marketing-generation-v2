@@ -28,16 +28,22 @@ Minimal Python service that orchestrates AI to generate marketing video campaign
 
 ## Deployment
 
-### Run as systemd service (current production setup)
+### Run as Docker container (current production setup)
 ```bash
-sudo systemctl enable --now marketing-generation  # runs uvicorn on 127.0.0.1:9105
-sudo systemctl reload nginx                       # picks up the marketing-generation vhost
+HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose up -d --build
+# tail logs
+docker logs -f marketing-generation-app-1
+# apply a code change
+HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose up -d --build --force-recreate
 ```
-The systemd unit is the single source of truth for the app process. Don't launch
-`uvicorn` by hand — that leaves duplicate instances on stray ports.
+The Docker container is the single source of truth for the app process. The
+container runs the app as a non-root user whose uid:gid is parameterizable via
+`HOST_UID` / `HOST_GID` so the bind-mounted `./output` directory is owned by
+the host user, not by root.
 
-`marketing-generation.socket` was disabled on 2026-09-07: it listened on `:9000`,
-which nothing uses (the service binds `:9105` itself).
+The legacy systemd unit at `/etc/systemd/system/marketing-generation.service`
+is **disabled** as of 2026-09-08. Don't launch `uvicorn` by hand — it leaves
+duplicate instances on stray ports.
 
 ### Nginx vhost
 Served by the **system nginx** (`systemctl nginx`), exactly like every other site
@@ -77,17 +83,22 @@ sudo nginx -t && sudo systemctl reload nginx
 Record `A marketing-generation.menustudioai.com → 65.109.100.94 (proxied)`,
 managed via API with the jaimebillanueba99@gmail.com account.
 
-### Docker (alternative)
+### Legacy: systemd unit
 ```bash
-docker compose up --build
-# open http://localhost:8000
+sudo systemctl enable --now marketing-generation  # runs uvicorn on 127.0.0.1:9105
 ```
+The systemd unit at `/etc/systemd/system/marketing-generation.service` points at
+the in-repo `.venv/bin/python`. It is currently **disabled**; prefer the Docker
+container above.
+
+`marketing-generation.socket` was disabled on 2026-09-07: it listened on `:9000`,
+which nothing uses.
 
 ## Environment
-Copy `.env.example` to `.env` and fill in:
-- `MINIMAX_API_KEY`
-- `WAVESPEED_API_KEY`
-- `LIGHTPANDA_BIN` (path to `lightpanda` binary)
+Copy `.env.example` to `.env` and fill in every variable listed there. The
+required ones for a working pipeline are `MINIMAX_API_KEY`, `WAVESPEED_API_KEY`,
+`OUTPUT_DIR`, and (if billing is enabled) `STRIPE_RK_LIVE` plus
+`STRIPE_WEBHOOK_SECRET`. See `.env.example` for the full list with comments.
 
 ## Frontend (SPA)
 
