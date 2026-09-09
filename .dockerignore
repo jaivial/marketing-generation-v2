@@ -24,10 +24,12 @@ __pycache__
 output
 data
 
-# --- Frontend deps and build output ---
+# --- Frontend deps (dev artifacts) ---
+# Note: static/dist is NOT excluded -- it is the production SPA bundle that the
+# Dockerfile's `COPY static ./static` must pick up. frontend/dist is the Vite
+# dev build output (different path) and is excluded.
 frontend/node_modules
 frontend/dist
-static/dist
 
 # --- Dev-only trees ---
 tests
