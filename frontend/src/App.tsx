@@ -17,6 +17,8 @@ import Pricing from './pages/Pricing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Confirm from './pages/Confirm';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import Onboarding from './pages/Onboarding';
 import AdminUsers from './pages/AdminUsers';
 import AdminSystem from './pages/AdminSystem';
@@ -60,6 +62,8 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/confirm" element={<Confirm />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
         {/* AuthRedirect bounces signed-in visitors of the auth views above to /dashboard. */}
         <Route path="/logout" element={<SignOut />} />
         <Route path="/onboarding" element={<Onboarding />} />

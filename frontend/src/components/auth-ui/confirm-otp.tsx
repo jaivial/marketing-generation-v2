@@ -10,8 +10,8 @@ import { FieldDescription, FieldError } from './ui/field';
 import { InputOTP, OTP_LENGTH } from './ui/input-otp';
 import { toast } from '../ui';
 
-/** Seconds the backend enforces between two resend mails (obs: `ui.auth.otp.cooldown`). */
-const RESEND_COOLDOWN_S = 60;
+/** Seconds the backend enforces between two mails (obs: `ui.auth.otp.cooldown`). */
+export const RESEND_COOLDOWN_S = 60;
 
 export type ConfirmOtpCardProps = {
   email: string;

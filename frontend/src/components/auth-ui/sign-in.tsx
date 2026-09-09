@@ -82,6 +82,12 @@ export const SignInCard: React.FC<SignInCardProps> = ({ className }) => {
                 />
               }
             />
+            <FieldDescription className="text-right" data-testid="auth-sign-in-forgot-password">
+              <Link to="/forgot-password" data-testid="auth-sign-in-forgot-password-link"
+                className="text-xs text-zinc-400 hover:text-zinc-200">
+                Forgot password?
+              </Link>
+            </FieldDescription>
             <FieldError role="alert" error={form.formError} data-testid="auth-sign-in-form-error" />
             {unconfirmed && (
               <FieldDescription data-testid="auth-sign-in-unconfirmed">
