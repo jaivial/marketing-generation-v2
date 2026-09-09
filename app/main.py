@@ -18,8 +18,20 @@ This is the *single* place where HTTP-level authorization is enforced.
 Route handlers can still declare ``Depends(require_root())`` etc. as a
 defence-in-depth, but the middleware is the primary gate.
 """
+import logging
+import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, status
+
+# Configure root logger so app-level log.info / log.warning actually surface
+# in `docker logs`. Uvicorn installs its own handlers but does not propagate
+# ours; this hook restores the standard stream handler at INFO level.
+_LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, _LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s :: %(message)s",
+    force=True,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
