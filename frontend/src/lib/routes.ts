@@ -37,6 +37,8 @@ export const ROUTES: RouteSpec[] = [
   { path: '/',         match: /^\/$/,                        permission: 'page:landing', category: 'public', roles: ['guest','user','viewer','billing','admin','root'], label: 'Home',     icon: 'home' },
   { path: '/pricing',  match: /^\/pricing$/,                  permission: 'page:pricing', category: 'public', roles: ['guest','user','viewer','billing','admin','root'], label: 'Pricing', icon: 'creditCard' },
   { path: '/login',    match: /^\/login$/,                    permission: null,           category: 'public', roles: ['guest','user','viewer','billing','admin','root'], label: 'Sign in', icon: 'key' },
+  { path: '/register', match: /^\/register$/,                  permission: null,           category: 'public', roles: ['guest','user','viewer','billing','admin','root'], label: 'Create account', icon: 'user' },
+  { path: '/confirm',  match: /^\/confirm$/,                   permission: null,           category: 'public', roles: ['guest','user','viewer','billing','admin','root'], label: 'Confirm email', icon: 'mail' },
 
   // ─── User (authenticated) ─────────────────────────────────────────────────
   { path: '/dashboard',         match: /^\/dashboard$/,          permission: 'page:dashboard',     category: 'user', roles: ['user','admin','root'], label: 'Dashboard',     icon: 'dashboard' },

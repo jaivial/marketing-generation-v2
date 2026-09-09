@@ -42,10 +42,11 @@ const Denied: React.FC<{ permission?: Permission | null; pathname: string }> = (
         )}
       </p>
       <p className="text-xs text-zinc-500 mt-3">
-        Try logging in as a different role from the sign-in page.
+        Sign in with an account that has the right access.
       </p>
-      <Link to="/login" className="btn btn-primary mt-6 text-sm inline-flex items-center gap-2">
-        <Icon name="key" size={14} /> Switch role
+      <Link to="/login" className="btn btn-primary mt-6 text-sm inline-flex items-center gap-2"
+        data-testid="guard-access-denied-signin-link">
+        <Icon name="key" size={14} /> Sign in
       </Link>
     </div>
   </div>
@@ -61,14 +62,14 @@ const Loading: React.FC = () => (
 
 /** Wraps a route and blocks access unless the principal has the right permission. */
 export const RequirePermission: React.FC<GuardProps> = ({ permission, children }) => {
-  const { isAuthenticated, roles } = useAuth();
+  const { isAuthenticated, roles, loading } = useAuth();
   const location = useLocation();
   // Decide the permission: explicit override wins, otherwise look up by path
   const route = matchRoute(location.pathname);
   const requiredPerm = permission !== undefined ? permission : (route?.permission ?? null);
 
   if (requiredPerm === null) return <>{children}</>;
-  if (roles === undefined) return <Loading />;
+  if (loading) return <Loading />;
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }

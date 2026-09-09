@@ -1,25 +1,60 @@
-// Login page — pick a demo role to "log in" as.
-// In a real backend this would be a password / OAuth / SSO form; here
-// we let the user pick any role for testing the ACL end-to-end.
+// Login page - real email + password sign-in.
+//
+// POST /api/auth/login
+//   200 -> JWT stored, on to /dashboard
+//   401 -> bad credentials
+//   403 -> the address exists but was never confirmed: offer to resend the code
+// observation point: `ui.auth.login` (page) / `ui.auth.otp.resend` (resend).
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/store';
-import { ALL_ROLES, ROLE_INFO, type RoleName, type Permission } from '../lib/acl';
-import { Logo, Icon } from '../components/ui';
+import { Logo, Icon, toast } from '../components/ui';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const Login: React.FC = () => {
-  const { loginAs, isAuthenticated, rolesNames } = useAuth();
+  const { login, resendOtp } = useAuth();
   const navigate = useNavigate();
-  const [selected, setSelected] = useState<RoleName>('user');
-  const [email, setEmail] = useState<string>('alice@example.com');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [unconfirmed, setUnconfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  async function doLogin() {
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setUnconfirmed(false);
+
+    if (!EMAIL_RE.test(email)) { setError('Enter a valid email address.'); return; }
+    if (!password) { setError('Enter your password.'); return; }
+
     setBusy(true);
     try {
-      await loginAs(selected, 'u-' + Math.random().toString(36).slice(2, 8), email);
-      navigate(selected === 'root' ? '/admin/system' : '/dashboard');
-    } finally { setBusy(false); }
+      await login(email.trim(), password);
+      navigate('/dashboard');
+    } catch (err: any) {
+      if (err?.status === 401) {
+        setError('Invalid email or password.');
+      } else if (err?.status === 403) {
+        setUnconfirmed(true);
+        setError('That email is not confirmed yet. Check your inbox for the 6-digit code.');
+      } else {
+        setError(err?.message || 'Sign in failed. Please try again.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resend() {
+    try {
+      await resendOtp(email.trim());
+      toast('Confirmation code sent - check your inbox.', 'success');
+      navigate(`/confirm?email=${encodeURIComponent(email.trim())}`);
+    } catch (err: any) {
+      toast(err?.message || 'Could not send a new code.', 'error');
+    }
   }
 
   return (
@@ -27,87 +62,75 @@ const Login: React.FC = () => {
       <header className="border-b border-zinc-800/80 backdrop-blur bg-zinc-950/70 sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2">
           <Logo />
-          {isAuthenticated && (
-            <span className="text-xs text-zinc-400">
-              Signed in as: {rolesNames.map((r: RoleName) => r.toUpperCase()).join(', ')}
-            </span>
-          )}
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
+      <main className="max-w-md mx-auto px-4 sm:px-6 py-10 sm:py-16">
         <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-6 sm:p-8">
           <h1 className="text-2xl font-bold font-display">Sign in to MarketingForge</h1>
           <p className="text-sm text-zinc-400 mt-2">
-            Pick a demo role to log in as. Each role has different access levels
-            in the system.
+            Welcome back. Enter the email and password you registered with.
           </p>
 
-          <div className="mt-6 space-y-2">
-            {ALL_ROLES.map(r => {
-              const selected_now = selected === r;
-              return (
-                <button
-                  key={r}
-                  onClick={() => setSelected(r)}
-                  className={cn(
-                    'w-full text-left rounded-xl border p-4 transition',
-                    selected_now
-                      ? 'bg-brand-500/10 border-brand-500 ring-1 ring-brand-500/30'
-                      : 'bg-zinc-950/40 border-zinc-800 hover:border-zinc-700'
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className={cn(
-                      'w-5 h-5 rounded-full border-2 flex items-center justify-center',
-                      selected_now ? 'border-brand-500 bg-brand-500' : 'border-zinc-700'
-                    )}>
-                      {selected_now && <span className="w-2 h-2 rounded-full bg-white" />}
-                    </span>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-semibold">{ROLE_INFO[r].label}</p>
-                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">{r}</span>
-                      </div>
-                      <p className="text-xs text-zinc-500 mt-0.5">{ROLE_INFO[r].description}</p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
+            <div>
+              <label htmlFor="login-email" className="label">Email</label>
+              <input
+                id="login-email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@company.com"
+                data-testid="login-email-input"
+                className="input"
+              />
+            </div>
 
-          <div className="mt-6">
-            <label className="text-xs font-medium text-zinc-400 block mb-1.5">Email (demo only)</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              className="input"
-            />
-          </div>
+            <div>
+              <label htmlFor="login-password" className="label">Password</label>
+              <input
+                id="login-password"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Your password"
+                data-testid="login-password-input"
+                className="input"
+              />
+            </div>
 
-          <button
-            onClick={doLogin}
-            disabled={busy}
-            className="mt-6 btn btn-primary w-full"
-          >
-            {busy ? 'Signing in…' : <>Sign in as {ROLE_INFO[selected].label} <Icon name="arrowRight" size={14} /></>}
-          </button>
+            {error && (
+              <p role="alert" data-testid="login-error" className="text-sm text-rose-400">{error}</p>
+            )}
+
+            {unconfirmed && (
+              <button
+                type="button"
+                onClick={resend}
+                data-testid="login-resend-confirmation"
+                className="text-xs text-brand-400 hover:text-brand-300"
+              >
+                Resend confirmation code
+              </button>
+            )}
+
+            <button type="submit" disabled={busy} data-testid="login-submit-button" className="btn btn-primary w-full">
+              {busy ? 'Signing in\u2026' : <>Sign in <Icon name="arrowRight" size={14} /></>}
+            </button>
+          </form>
+
+          <p className="text-sm text-zinc-400 mt-6 text-center">
+            New here?{' '}
+            <Link to="/register" data-testid="login-create-account-link" className="text-brand-400 hover:text-brand-300">
+              Create account
+            </Link>
+          </p>
         </div>
-
-        <p className="text-xs text-zinc-500 mt-6 text-center">
-          This is a demo login. No password required — the chosen role determines what
-          you can do and see. Try <code className="text-zinc-300">root</code> for the
-          full admin area at <code className="text-zinc-300">/admin/system</code>.
-        </p>
       </main>
     </div>
   );
 };
-
-function cn(...args: (string | false | null | undefined)[]) {
-  return args.filter(Boolean).join(' ');
-}
 
 export default Login;

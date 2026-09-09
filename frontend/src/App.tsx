@@ -15,6 +15,8 @@ import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 import Pricing from './pages/Pricing';
 import Login from './pages/Login';
+import Register from './pages/Register';
+import Confirm from './pages/Confirm';
 import Onboarding from './pages/Onboarding';
 import AdminUsers from './pages/AdminUsers';
 import AdminSystem from './pages/AdminSystem';
@@ -54,6 +56,8 @@ const App: React.FC = () => {
         <Route path="/" element={<RequirePermission permission="page:landing"><Landing /></RequirePermission>} />
         <Route path="/pricing" element={<RequirePermission permission="page:pricing"><Pricing /></RequirePermission>} />
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/confirm" element={<Confirm />} />
         <Route path="/onboarding" element={<Onboarding />} />
 
         {/* Authenticated user */}

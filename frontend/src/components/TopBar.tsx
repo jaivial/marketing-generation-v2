@@ -3,6 +3,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Icon, type IconName } from './ui';
+import AuthMenu from './AuthMenu';
 import { cn } from '../lib/utils';
 
 interface Props {
@@ -28,9 +29,13 @@ const TopBar: React.FC<Props> = ({ title, breadcrumb, actions }) => {
         )}
         <h1 className="text-xl sm:text-2xl font-semibold font-display truncate">{title}</h1>
       </div>
-      {hasActions && (
-        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">{actions}</div>
-      )}
+      <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+        {hasActions && (
+          <div className="flex items-center gap-2 flex-wrap justify-end">{actions}</div>
+        )}
+        {/* Account area: email + Sign out, or Sign in / Create account. */}
+        <AuthMenu />
+      </div>
     </div>
   );
 };

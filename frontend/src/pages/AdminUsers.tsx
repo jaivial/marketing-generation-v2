@@ -285,7 +285,7 @@ const DeniedScreen: React.FC<{ onLogin: () => void }> = ({ onLogin }) => (
     <p className="text-sm text-zinc-500 mb-6">
       The User Management page is restricted to the global root administrator.
     </p>
-    <a href="#/login" onClick={onLogin} className="btn btn-primary">Sign in as root</a>
+    <a href="#/login" onClick={onLogin} className="btn btn-primary" data-testid="admin-users-denied-signin-link">Sign in</a>
   </div>
 );
 
