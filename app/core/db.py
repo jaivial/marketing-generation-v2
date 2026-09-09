@@ -185,7 +185,20 @@ CREATE TABLE IF NOT EXISTS workspace_plan (
     since        REAL NOT NULL
 );
 
+-- Append-only SSE log: one row per event the pipeline emitted, in order.
+-- The events endpoint replays it on (re)connect so a dropped socket never
+-- loses a step.  # coordination id: pipeline.event_log
+CREATE TABLE IF NOT EXISTS campaign_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    campaign_id TEXT NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+    seq         INTEGER NOT NULL,
+    event       TEXT NOT NULL,
+    data_json   TEXT,
+    created_at  REAL NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_assets_campaign ON campaign_assets(campaign_id);
+CREATE INDEX IF NOT EXISTS idx_events_campaign ON campaign_events(campaign_id, seq);
 CREATE INDEX IF NOT EXISTS idx_ledger_ws       ON credit_ledger(workspace_id);
 CREATE INDEX IF NOT EXISTS idx_campaigns_ws    ON campaigns(workspace_id);
 """

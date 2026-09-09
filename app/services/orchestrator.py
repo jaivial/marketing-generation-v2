@@ -64,6 +64,40 @@ MAX_CHUNKS = 6
 MAX_FRAMES = 9
 
 
+#: Binaries the pipeline shells out to, in preference order. ``lightpanda``
+#: does the URL scrape, ``agent-browser`` is the fallback reader.
+SCRAPE_BINARIES = ("lightpanda", "agent-browser")
+#: Only needed when the ad is longer than one clip and must be stitched.
+STITCH_BINARY = "ffmpeg"
+
+
+class PipelineError(RuntimeError):
+    """A pipeline failure that carries a machine-readable ``code``.
+
+    Raised anywhere inside ``_pipeline`` so the single pre-existing
+    ``except`` block stays the only place that refunds / persists / emits.
+    """
+
+    def __init__(self, code: str, message: str, **detail: Any) -> None:
+        super().__init__(message)
+        self.code = code
+        self.detail = detail
+
+
+def error_event(code: str, message: str, **detail: Any) -> dict:
+    """One shape for every failure so the wizard can branch on ``code``.
+
+    Coordination id: pipeline.error.``code`` -- the same codes are emitted by
+    the API layer and rendered by the frontend (data-testid="wizard-error").
+    """
+    return {"event": "error", "data": {"code": code, "message": message, **detail}}
+
+
+def missing_binaries(*names: str) -> list[str]:
+    """Which of ``names`` are not installed -- empty list means "good to go"."""
+    return [name for name in names if not shutil.which(name)]
+
+
 SYSTEM = (
     "You are a senior marketing director. Produce concise, conversion-oriented "
     "copy. When asked for JSON, reply with ONLY valid JSON \u2014 no prose."
@@ -129,7 +163,56 @@ class Orchestrator:
             username=req.username,
             password=req.password,
         )
+        self._assert_reader_ready(reader)
         return await reader.read(req.target)
+
+    @staticmethod
+    def _assert_reader_ready(reader: SourceReader) -> None:
+        """Preflight the scraper *before* an opaque exec failure surfaces.
+
+        Only CLI-backed readers carry a binary to look for, so an injected
+        fake reader (offline runs, unit tests) is never blocked -- the check
+        travels with the strategy that needs it (DIP).
+        """
+        cli = getattr(reader, "_bin", None)
+        if not cli:
+            return
+        missing = missing_binaries(*SCRAPE_BINARIES)
+        if len(missing) == len(SCRAPE_BINARIES):
+            raise PipelineError(
+                "missing_binary",
+                f"No scraper binary on PATH (looked for: "
+                f"{', '.join(SCRAPE_BINARIES)}); install lightpanda to read "
+                f"the source URL, or switch the campaign source to 'files'.",
+                step="source", missing=missing,
+            )
+
+    def _preflight(
+        self, req: CampaignRequest, campaign_id: str | None, n_video_clips: int,
+    ) -> list[dict]:
+        """Say what will degrade *before* the clips are paid for.
+
+        ``ffmpeg`` is the one dependency the pipeline can work around (it
+        returns the first clip unstitched), so a missing binary is announced
+        as a coded, non-terminal ``warning`` instead of killing the run. The
+        blocking scraper check lives with the reader in :meth:`_ctx`.
+        """
+        if n_video_clips <= 1 or shutil.which(STITCH_BINARY):
+            return []
+        return [{
+            "event": "warning",
+            "data": {
+                "code": "missing_ffmpeg",
+                "step": "stitch",
+                "message": (
+                    f"{STITCH_BINARY} is not installed, so the "
+                    f"{n_video_clips} clips cannot be merged into one MP4 -- "
+                    f"only the first clip will be delivered."
+                ),
+                "n_video_clips": n_video_clips,
+                "campaign_id": campaign_id,
+            },
+        }]
 
     @staticmethod
     def _n_frames(duration_s: int) -> int:
@@ -321,6 +404,14 @@ class Orchestrator:
             n_video_clips=n_video_clips,
             n_llm_calls=self.N_LLM_CALLS,
         )
+        # obs: pipeline.preflight -- fail loud before touching a provider.
+        # A missing binary is a deployment problem, so we refuse the run up
+        # front instead of dying mid-way with an opaque step-4 failure.
+        for ev in self._preflight(req, campaign_id, n_video_clips):
+            yield ev
+            if ev["event"] == "error":   # blocking: cannot continue at all
+                return
+
         reserved_credits = 0.0
         # Consumption counters, read by the settle/refund paths below.
         frames_done = 0
@@ -337,15 +428,11 @@ class Orchestrator:
                     store=self._storage,
                 )
             except InsufficientCreditsError as exc:
-                yield {
-                    "event": "error",
-                    "data": {
-                        "message": str(exc),
-                        "code": "insufficient_credits",
-                        "required_credits": price_for_user(budget_usd),
-                        "balance": exc.balance,
-                    },
-                }
+                yield error_event(
+                    "insufficient_credits", str(exc),
+                    required_credits=price_for_user(budget_usd),
+                    balance=exc.balance,
+                )
                 return
             reserved_credits = price_for_user(budget_usd)
             yield {
@@ -373,7 +460,14 @@ class Orchestrator:
                 ),
             )
             llm_calls_done += 1
-            plan = self._extract_json(plan_raw)
+            try:
+                plan = self._extract_json(plan_raw)
+            except (ValueError, json.JSONDecodeError) as exc:
+                raise PipelineError(
+                    "model_not_json",
+                    f"The model did not return a valid campaign plan: {exc}",
+                    step="plan",
+                ) from exc
             yield {"event": "plan", "data": plan}
 
             # 2. AI decide scenes & screenshots. The model is told the hard
@@ -419,7 +513,10 @@ class Orchestrator:
                         yield {"event": "screenshot", "data": {"url": url, "page": page_url}}
                 except Exception as e:  # noqa: BLE001 \u2014 fall back to no screenshots
                     log_msg = f"screenshot capture failed: {e}"
-                    yield {"event": "screenshot", "data": {"error": log_msg}}
+                    # Deliberate degrade, not a silent swallow: the run goes on
+                    # without references and the client still gets a code.
+                    yield {"event": "screenshot",
+                           "data": {"error": log_msg, "code": "screenshot_failed"}}
 
             # 4. Frame visual prompts (one per frame)
             frames_raw = await self._chat.complete(
@@ -477,9 +574,17 @@ class Orchestrator:
                 prompt = self._chunk_prompt(
                     master_prompt, seg, hint, i, n_chunks, per_chunk_s,
                 )
-                chunk_urls.append(
-                    await self._wavespeed.generate_video(prompt, refs, per_chunk_s)
-                )
+                try:
+                    url = await self._wavespeed.generate_video(
+                        prompt, refs, per_chunk_s,
+                    )
+                except Exception as exc:  # noqa: BLE001 - quota, 4xx, timeout
+                    raise PipelineError(
+                        "video_provider_error",
+                        f"Video generation failed on clip {i + 1}/{n_chunks}: {exc}",
+                        step="video", clip=i + 1, n_chunks=n_chunks,
+                    ) from exc
+                chunk_urls.append(url)
                 clips_done += 1
 
             video_url, stitched = await self._stitch(chunk_urls)
@@ -571,10 +676,12 @@ class Orchestrator:
                     refunded = round(unused, 2)
             if campaign_id:
                 self._persist_failed(campaign_id, str(e))
-            yield {
-                "event": "error",
-                "data": {"message": str(e), "refunded_credits": refunded},
-            }
+            yield error_event(
+                getattr(e, "code", "pipeline_error"), str(e),
+                refunded_credits=refunded,
+                step=getattr(e, "detail", {}).get("step"),
+                campaign_id=campaign_id,
+            )
 
     # ---------- chunked script + stitching ------------------------------------
     async def _chunked_script(
