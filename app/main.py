@@ -53,6 +53,7 @@ from app.core.acl import (
     PERMISSION_LIST,
     _parse_demo_token,
     enforce_route_acl,
+    resolve_principal_from_request,
 )
 
 
@@ -74,23 +75,16 @@ app.add_middleware(
 
 
 # ─── Global ACL middleware ─────────────────────────────────────────────────────
+# The middleware runs before any FastAPI dependency injection, so we resolve
+# the principal directly from the raw Request via the shared helper in
+# app.core.acl. That helper applies the same precedence as the per-route
+# dependency: real JWT first, then the dev-only demo-token / X-Demo-Principal
+# bypass, then anonymous guest. (Previously this method only knew about
+# demo tokens, so any signed JWT was downgraded to guest and the middleware
+# 403'd the request before the route handler ran -- a duplicate of the
+# older auth path that survived PR #18.)
 def _resolve_principal(request: Request) -> Principal:
-    """Build a Principal from the Authorization header or X-Demo-Principal."""
-    creds = request.headers.get("authorization", "")
-    if creds.startswith("Bearer "):
-        token = creds[len("Bearer "):]
-        principal = _parse_demo_token("Bearer " + token) or _parse_demo_token(creds)
-        if principal is not None:
-            return principal
-    override = request.headers.get("X-Demo-Principal")
-    if override:
-        try:
-            flags, rest = override.split(":", 1)
-            id_, _, email = rest.partition(":")
-            return Principal(id=id_, email=email, roles=Role(int(flags)))
-        except ValueError:
-            pass
-    return Principal(id="guest", email="", roles=Role.GUEST)
+    return resolve_principal_from_request(request)
 
 
 class ACLMiddleware(BaseHTTPMiddleware):

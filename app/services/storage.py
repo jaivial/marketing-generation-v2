@@ -36,14 +36,17 @@ def create_user(*, email: str, password_hash: str, name: str | None = None,
     with get_db().write() as conn:
         conn.execute(
             "INSERT INTO users (id, email, password_hash, name, email_confirmed, "
-            "confirm_otp, confirm_otp_expires, roles, created_at) "
-            "VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)",
+            "confirm_otp, confirm_otp_expires, reset_token, reset_expires, "
+            "last_password_reset_at, roles, created_at) "
+            "VALUES (?, ?, ?, ?, 0, ?, ?, NULL, NULL, NULL, ?, ?)",
             (user_id, email.lower(), password_hash, name, otp, expires, roles, now),
         )
     return {
         "id": user_id, "email": email.lower(), "name": name,
         "email_confirmed": False, "roles": roles, "created_at": now,
         "confirm_otp": otp, "confirm_otp_expires": expires,
+        "reset_token": None, "reset_expires": None,
+        "last_password_reset_at": None,
     }
 
 
@@ -108,6 +111,63 @@ def resend_confirm_otp(user_id: str) -> dict:
         "id": user_id, "confirm_otp": otp, "confirm_otp_expires": expires,
         "last_otp_resend_at": now,
     }
+
+
+# ---------------------------------------------------------------------------
+# Password reset (obs: auth.reset.storage, coord: auth.reset.token)
+# ---------------------------------------------------------------------------
+# Reset link lifetime + resend cooldown, in seconds (obs: auth.reset.ttl).
+PASSWORD_RESET_TTL_SECONDS = 1800
+PASSWORD_RESET_COOLDOWN_SECONDS = 60
+
+
+def request_password_reset(email: str) -> dict | None:
+    """Mint a single-use reset token for ``email`` (coord: auth.reset.request).
+
+    Returns the refreshed user row, or ``None`` when no user has that email
+    (the API layer swallows that case so the endpoint never enumerates).
+    """
+    user = get_user_by_email(email)
+    if user is None:
+        return None
+    now = time.time()
+    token = secrets.token_urlsafe(32)
+    with get_db().write() as conn:
+        conn.execute(
+            "UPDATE users SET reset_token = ?, reset_expires = ?, "
+            "last_password_reset_at = ? WHERE id = ?",
+            (token, now + PASSWORD_RESET_TTL_SECONDS, now, user["id"]),
+        )
+    return get_user_by_id(user["id"])
+
+
+def consume_password_reset(token: str, new_password_hash: str) -> dict | None:
+    """Swap the password for a valid, unexpired token (coord: auth.reset.consume).
+
+    The token is single-use: it and its expiry are cleared on success, so a
+    replayed link is dead. Returns the refreshed row, ``None`` on any miss.
+    """
+    if not token:
+        return None
+    with get_db().connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM users WHERE reset_token = ?", (token,)
+        ).fetchone()
+    if row is None:
+        return None
+    user = dict(row)
+    expires = user.get("reset_expires")
+    if expires is None or float(expires) < time.time():
+        return None
+    if not hmac.compare_digest(str(user["reset_token"]), str(token)):
+        return None
+    with get_db().write() as conn:
+        conn.execute(
+            "UPDATE users SET password_hash = ?, reset_token = NULL, "
+            "reset_expires = NULL WHERE id = ?",
+            (new_password_hash, user["id"]),
+        )
+    return get_user_by_id(user["id"])
 
 
 def touch_last_seen(user_id: str) -> None:

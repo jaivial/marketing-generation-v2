@@ -88,6 +88,7 @@ class Database:
         with self.write() as conn:
             conn.executescript(_SCHEMA)
             _migrate_users_otp_columns(conn)
+            _migrate_users_reset_columns(conn)
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +132,32 @@ def _migrate_users_otp_columns(conn: sqlite3.Connection) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Password-reset columns (obs: db.migrate.users_reset, coord: auth.reset.migration)
+# ---------------------------------------------------------------------------
+_RESET_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("reset_token", "TEXT"),
+    ("reset_expires", "REAL"),
+    ("last_password_reset_at", "REAL"),
+)
+
+
+def _migrate_users_reset_columns(conn: sqlite3.Connection) -> None:
+    """One-shot, idempotent ALTER block for the password-reset columns.
+
+    Same shape as :func:`_migrate_users_otp_columns`: a pre-reset database
+    gets the three nullable columns bolted on, nothing else changes.
+    """
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'"
+    ).fetchone() is None:
+        return
+    existing = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
+    for name, ddl in _RESET_COLUMNS:
+        if name not in existing:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {name} {ddl}")
+
+
+# ---------------------------------------------------------------------------
 # Schema (one big SQL string for readability)
 # ---------------------------------------------------------------------------
 _SCHEMA = """
@@ -143,6 +170,9 @@ CREATE TABLE IF NOT EXISTS users (
     confirm_otp         TEXT,   -- 6-digit code, NULL once consumed
     confirm_otp_expires REAL,   -- unix ts, NULL once consumed
     last_otp_resend_at  REAL,   -- unix ts, resend rate-limit (obs: auth.otp.resend)
+    reset_token             TEXT,   -- 32-byte url-safe token, NULL once consumed
+    reset_expires           REAL,   -- unix ts, NULL once consumed
+    last_password_reset_at  REAL,   -- unix ts, resend rate-limit (obs: auth.reset.resend)
     roles         INTEGER NOT NULL DEFAULT 2,    -- USER bit
     created_at    REAL NOT NULL,
     last_seen     REAL

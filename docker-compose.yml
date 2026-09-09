@@ -26,4 +26,9 @@ services:
       OUTPUT_DIR: /app/output
     volumes:
       - ./output:/app/output
+      # Persist the SQLite store across container recreates. Bind-mounted
+      # to a host directory so the uid/gid of the volume matches HOST_UID.
+      # A named Docker volume would be created as root and break the
+      # non-root container user.
+      - ./data:/app/data
     restart: unless-stopped

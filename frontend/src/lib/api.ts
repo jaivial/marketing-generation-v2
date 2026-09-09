@@ -354,7 +354,9 @@ async function postAuth<T>(path: string, body: unknown, observationPoint: string
     body: JSON.stringify(body),
   });
   if (!r.ok) throw new ApiError(r.status, await errorDetail(r));
-  return r.json();
+  // Some auth endpoints (password reset) answer 200 with an empty body.
+  const raw = await r.text();
+  return (raw ? JSON.parse(raw) : null) as T;
 }
 
 /** Create an account; the backend mails a 6-digit code and returns an unconfirmed token. */
@@ -372,6 +374,20 @@ export const confirmOtp = (email: string, otp: string): Promise<TokenOut> =>
 /** Re-mail a fresh code (429 while the 60s cooldown is running). */
 export const resendOtp = (email: string): Promise<OtpOut> =>
   postAuth('/api/auth/resend-otp', { email }, 'ui.auth.otp.resend');
+
+/** `{ ok: true }` - always 200, even for unknown addresses (no enumeration). */
+export interface ForgotPasswordOut {
+  ok: boolean;
+}
+
+/** Ask for a reset mail; 429 with a retry hint while the cooldown runs. */
+export const forgotPassword = (email: string): Promise<ForgotPasswordOut> =>
+  postAuth('/api/auth/forgot-password', { email }, 'ui.auth.password.forgot');
+
+/** Swap the mailed token for a new password; 400 on an invalid/expired token. */
+export const resetPassword = (token: string, newPassword: string): Promise<void> =>
+  postAuth('/api/auth/reset-password', { token, new_password: newPassword }, 'ui.auth.password.reset')
+    .then(() => undefined);
 
 export async function fetchWhoami(): Promise<AuthMe> {
   const r = await fetch(`${apiBase}/api/auth/whoami`, {

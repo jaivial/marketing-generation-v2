@@ -35,6 +35,24 @@ class OtpOut(BaseModel):
     expires_in: int = 900
 
 
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordOut(BaseModel):
+    """Always the same body, so unknown emails cannot be enumerated."""
+    ok: bool = True
+
+
+class ResetPasswordIn(BaseModel):
+    token: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ResetPasswordOut(BaseModel):
+    ok: bool = True
+
+
 class UserOut(BaseModel):
     id: str
     email: EmailStr
